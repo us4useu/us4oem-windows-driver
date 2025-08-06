@@ -1,0 +1,62 @@
+;
+; us4oem.inf
+;
+
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = System ; TODO: specify appropriate Class
+ClassGuid   = {4d36e97d-e325-11ce-bfc1-08002be10318} ; TODO: specify appropriate ClassGuid
+Provider    = %ManufacturerName%
+CatalogFile = us4oem.cat
+DriverVer   = ; TODO: set DriverVer in stampinf property pages
+PnpLockdown = 1
+
+[DestinationDirs]
+DefaultDestDir = 13
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+us4oem.sys  = 1,,
+
+;*****************************************
+; Install Section
+;*****************************************
+
+[Manufacturer]
+%ManufacturerName% = Standard,NT$ARCH$.10.0...16299 ; %13% support introduced in build 16299
+
+[Standard.NT$ARCH$.10.0...16299]
+%us4oem.DeviceDesc% = us4oem_Device, PCI\VEN_1172&DEV_E005
+
+[us4oem_Device.NT]
+CopyFiles = File_Copy
+
+[File_Copy]
+us4oem.sys
+
+;-------------- Service installation
+[us4oem_Device.NT.Services]
+AddService = us4oem,%SPSVCINST_ASSOCSERVICE%, us4oem_Service_Inst
+
+; -------------- us4oem driver install sections
+[us4oem_Service_Inst]
+DisplayName    = %us4oem.SVCDESC%
+ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
+StartType      = 3               ; SERVICE_DEMAND_START
+ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %13%\us4oem.sys
+
+[us4oem_Device.NT.Wdf]
+KmdfService = us4oem, us4oem_wdfsect
+
+[us4oem_wdfsect]
+KmdfLibraryVersion = $KMDFVERSION$
+
+[Strings]
+SPSVCINST_ASSOCSERVICE = 0x00000002
+ManufacturerName = "us4us"
+DiskName = "us4oem Installation Disk"
+us4oem.DeviceDesc = "us4oem"
+us4oem.SVCDESC = "us4oem Service"
