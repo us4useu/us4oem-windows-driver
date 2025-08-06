@@ -10,6 +10,7 @@
 #include <malloc.h>
 #include <vector>
 #include <iomanip>
+#include <map>
 
 // 
 #include "us4oemapi.h"

@@ -4,20 +4,14 @@
 // Note that this is very much not a well-made example, it is just a quick way to test the driver.
 
 HDEVINFO hDevInfo;
-PSP_DEVICE_INTERFACE_DETAIL_DATA pDeviceInterfaceDetail;
-HANDLE hDevice = INVALID_HANDLE_VALUE;
+std::map<int, PSP_DEVICE_INTERFACE_DETAIL_DATA> deviceInterfaceDetailMap;
+std::map<int, HANDLE> deviceHandleMap;
 
-BOOL
-GetDevicePath()
-{
+int count = -1;
+
+VOID
+GetDeviceCount() {
     SP_DEVICE_INTERFACE_DATA DeviceInterfaceData;
-    SP_DEVINFO_DATA DeviceInfoData;
-
-    ULONG size;
-    int count, i, index;
-    BOOL status = TRUE;
-    TCHAR* DeviceName = NULL;
-    TCHAR* DeviceLocation = NULL;
 
     //
     //  Retreive the device information for all us4oem devices.
@@ -50,7 +44,28 @@ GetDevicePath()
     //
     count--;
 
-	printf("Found %d us4oem devices.\n", count);
+    printf("Found %d us4oem devices.\n", count);
+}
+
+BOOL
+GetDevicePath(int index)
+{
+    SP_DEVICE_INTERFACE_DATA DeviceInterfaceData;
+    SP_DEVINFO_DATA DeviceInfoData;
+
+    ULONG size;
+    BOOL status = TRUE;
+    TCHAR* DeviceName = NULL;
+    TCHAR* DeviceLocation = NULL;
+
+    if (count == -1) {
+        GetDeviceCount();
+	}
+
+    if (index > count) {
+        printf("Requested index %d is out of range. Valid range is 0 to %d.\n", index, count);
+		return FALSE;
+    }
 
     //
     //  If the count is zero then there are no devices present.
@@ -67,180 +82,11 @@ GetDevicePath()
     DeviceInterfaceData.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
     DeviceInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
 
-    //
-    //  Loop through the device list to allow user to choose
-    //  a device.  If there is only one device, select it
-    //  by default.
-    //
-    i = 0;
-    while (SetupDiEnumDeviceInterfaces(hDevInfo,
-        NULL,
-        (LPGUID)&GUID_DEVINTERFACE_us4oem,
-        i,
-        &DeviceInterfaceData)) {
-
-        //
-        // Determine the size required for the DeviceInterfaceData
-        //
-        SetupDiGetDeviceInterfaceDetail(hDevInfo,
-            &DeviceInterfaceData,
-            NULL,
-            0,
-            &size,
-            NULL);
-
-        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
-            printf("SetupDiGetDeviceInterfaceDetail failed, Error: %u", GetLastError());
-            return FALSE;
-        }
-
-        pDeviceInterfaceDetail = (PSP_DEVICE_INTERFACE_DETAIL_DATA)malloc(size);
-
-        if (!pDeviceInterfaceDetail) {
-            printf("Insufficient memory.\n");
-            return FALSE;
-        }
-
-        //
-        // Initialize structure and retrieve data.
-        //
-        pDeviceInterfaceDetail->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA);
-        status = SetupDiGetDeviceInterfaceDetail(hDevInfo,
-            &DeviceInterfaceData,
-            pDeviceInterfaceDetail,
-            size,
-            NULL,
-            &DeviceInfoData);
-
-        free(pDeviceInterfaceDetail);
-
-        if (!status) {
-            printf("SetupDiGetDeviceInterfaceDetail failed, Error: %u", GetLastError());
-            return status;
-        }
-
-        //
-        //  Get the Device Name
-        //  Calls to SetupDiGetDeviceRegistryProperty require two consecutive
-        //  calls, first to get required buffer size and second to get
-        //  the data.
-        //
-        SetupDiGetDeviceRegistryProperty(hDevInfo,
-            &DeviceInfoData,
-            SPDRP_DEVICEDESC,
-            NULL,
-            (PBYTE)DeviceName,
-            0,
-            &size);
-
-        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
-            printf("SetupDiGetDeviceRegistryProperty failed, Error: %u", GetLastError());
-            return FALSE;
-        }
-
-        DeviceName = (TCHAR*)malloc(size);
-        if (!DeviceName) {
-            printf("Insufficient memory.\n");
-            return FALSE;
-        }
-
-        status = SetupDiGetDeviceRegistryProperty(hDevInfo,
-            &DeviceInfoData,
-            SPDRP_DEVICEDESC,
-            NULL,
-            (PBYTE)DeviceName,
-            size,
-            NULL);
-        if (!status) {
-            printf("SetupDiGetDeviceRegistryProperty failed, Error: %u",
-                GetLastError());
-            free(DeviceName);
-            return status;
-        }
-
-        //
-        //  Now retrieve the Device Location.
-        //
-        SetupDiGetDeviceRegistryProperty(hDevInfo,
-            &DeviceInfoData,
-            SPDRP_LOCATION_INFORMATION,
-            NULL,
-            (PBYTE)DeviceLocation,
-            0,
-            &size);
-
-        if (GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
-            DeviceLocation = (TCHAR*)malloc(size);
-
-            if (DeviceLocation != NULL) {
-
-                status = SetupDiGetDeviceRegistryProperty(hDevInfo,
-                    &DeviceInfoData,
-                    SPDRP_LOCATION_INFORMATION,
-                    NULL,
-                    (PBYTE)DeviceLocation,
-                    size,
-                    NULL);
-                if (!status) {
-                    free(DeviceLocation);
-                    DeviceLocation = NULL;
-                }
-            }
-
-        }
-        else {
-            DeviceLocation = NULL;
-        }
-
-        //
-        // If there is more than one device print description.
-        //
-        if (count > 1) {
-            printf("%d- ", i);
-        }
-
-        printf("%ls\n", DeviceName);
-
-        if (DeviceLocation) {
-            printf("        %ls\n", DeviceLocation);
-        }
-
-        free(DeviceName);
-        DeviceName = NULL;
-
-        if (DeviceLocation) {
-            free(DeviceLocation);
-            DeviceLocation = NULL;
-        }
-
-        i++; // Cycle through the available devices.
-    }
-
-    //
-    //  Select device.
-    //
-    index = 0;
-    if (count > 1) {
-        printf("\nSelect Device: ");
-
-        if (scanf_s("%d", &index) == 0) {
-            return ERROR_INVALID_DATA;
-        }
-    }
-
-    //
-    //  Get information for specific device.
-    //
-    status = SetupDiEnumDeviceInterfaces(hDevInfo,
+    SetupDiEnumDeviceInterfaces(hDevInfo,
         NULL,
         (LPGUID)&GUID_DEVINTERFACE_us4oem,
         index,
         &DeviceInterfaceData);
-
-    if (!status) {
-        printf("SetupDiEnumDeviceInterfaces failed, Error: %u", GetLastError());
-        return status;
-    }
 
     //
     // Determine the size required for the DeviceInterfaceData
@@ -257,9 +103,9 @@ GetDevicePath()
         return FALSE;
     }
 
-    pDeviceInterfaceDetail = (PSP_DEVICE_INTERFACE_DETAIL_DATA)malloc(size);
+    deviceInterfaceDetailMap[index] = (PSP_DEVICE_INTERFACE_DETAIL_DATA)malloc(size);
 
-    if (!pDeviceInterfaceDetail) {
+    if (!deviceInterfaceDetailMap[index]) {
         printf("Insufficient memory.\n");
         return FALSE;
     }
@@ -267,42 +113,129 @@ GetDevicePath()
     //
     // Initialize structure and retrieve data.
     //
-    pDeviceInterfaceDetail->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA);
-
+    deviceInterfaceDetailMap[index]->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA);
     status = SetupDiGetDeviceInterfaceDetail(hDevInfo,
         &DeviceInterfaceData,
-        pDeviceInterfaceDetail,
+        deviceInterfaceDetailMap[index],
         size,
         NULL,
         &DeviceInfoData);
+
     if (!status) {
         printf("SetupDiGetDeviceInterfaceDetail failed, Error: %u", GetLastError());
         return status;
+    }
+
+    //
+    //  Get the Device Name
+    //  Calls to SetupDiGetDeviceRegistryProperty require two consecutive
+    //  calls, first to get required buffer size and second to get
+    //  the data.
+    //
+    SetupDiGetDeviceRegistryProperty(hDevInfo,
+        &DeviceInfoData,
+        SPDRP_DEVICEDESC,
+        NULL,
+        (PBYTE)DeviceName,
+        0,
+        &size);
+
+    if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
+        printf("SetupDiGetDeviceRegistryProperty failed, Error: %u", GetLastError());
+        return FALSE;
+    }
+
+    DeviceName = (TCHAR*)malloc(size);
+    if (!DeviceName) {
+        printf("Insufficient memory.\n");
+        return FALSE;
+    }
+
+    status = SetupDiGetDeviceRegistryProperty(hDevInfo,
+        &DeviceInfoData,
+        SPDRP_DEVICEDESC,
+        NULL,
+        (PBYTE)DeviceName,
+        size,
+        NULL);
+    if (!status) {
+        printf("SetupDiGetDeviceRegistryProperty failed, Error: %u",
+            GetLastError());
+        free(DeviceName);
+        return status;
+    }
+
+    //
+    //  Now retrieve the Device Location.
+    //
+    SetupDiGetDeviceRegistryProperty(hDevInfo,
+        &DeviceInfoData,
+        SPDRP_LOCATION_INFORMATION,
+        NULL,
+        (PBYTE)DeviceLocation,
+        0,
+        &size);
+
+    if (GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
+        DeviceLocation = (TCHAR*)malloc(size);
+
+        if (DeviceLocation != NULL) {
+
+            status = SetupDiGetDeviceRegistryProperty(hDevInfo,
+                &DeviceInfoData,
+                SPDRP_LOCATION_INFORMATION,
+                NULL,
+                (PBYTE)DeviceLocation,
+                size,
+                NULL);
+            if (!status) {
+                free(DeviceLocation);
+                DeviceLocation = NULL;
+            }
+        }
+
+    }
+    else {
+        DeviceLocation = NULL;
+    }
+
+    printf("%ls\n", DeviceName);
+
+    if (DeviceLocation) {
+        printf("@ %ls\n", DeviceLocation);
+    }
+
+    free(DeviceName);
+    DeviceName = NULL;
+
+    if (DeviceLocation) {
+        free(DeviceLocation);
+        DeviceLocation = NULL;
     }
 
     return status;
 }
 
 BOOL
-GetDeviceHandle()
+GetDeviceHandle(int index)
 {
     BOOL status = TRUE;
 
-    if (pDeviceInterfaceDetail == NULL) {
-        status = GetDevicePath();
+    if (deviceInterfaceDetailMap[index] == NULL) {
+        status = GetDevicePath(index);
     }
-    if (pDeviceInterfaceDetail == NULL) {
+    if (deviceInterfaceDetailMap[index] == NULL) {
         status = FALSE;
     }
 
     if (status) {
 
-		printf("Device Path: %ls\n", pDeviceInterfaceDetail->DevicePath);
+		printf("Device Path: %ls\n", deviceInterfaceDetailMap[index]->DevicePath);
 
         //
         //  Get handle to device.
         //
-        hDevice = CreateFile(pDeviceInterfaceDetail->DevicePath,
+        deviceHandleMap[index] = CreateFile(deviceInterfaceDetailMap[index]->DevicePath,
             GENERIC_READ | GENERIC_WRITE,
             FILE_SHARE_READ | FILE_SHARE_WRITE,
             NULL,
@@ -310,7 +243,7 @@ GetDeviceHandle()
             0,
             NULL);
 
-        if (hDevice == INVALID_HANDLE_VALUE) {
+        if (deviceHandleMap[index] == INVALID_HANDLE_VALUE) {
             status = FALSE;
             printf("CreateFile failed.  Error:%u", GetLastError());
         }
@@ -320,7 +253,7 @@ GetDeviceHandle()
 }
 
 BOOL
-Us4OemGetDriverInfo()
+Us4OemGetDriverInfo(int index)
 {
     BOOL status = TRUE;
     char outBuffer[32];
@@ -328,19 +261,19 @@ Us4OemGetDriverInfo()
 
 	memset(outBuffer, 0, 32);
 
-    if (hDevice == INVALID_HANDLE_VALUE) {
-        status = GetDeviceHandle();
+    if (deviceHandleMap.count(index) == 0 || deviceHandleMap[index] == INVALID_HANDLE_VALUE) {
+        status = GetDeviceHandle(index);
         if (status == FALSE) {
             return status;
         }
     }
 
-    if (hDevice == 0) {
+    if (deviceHandleMap[index] == 0) {
         printf("Invalid device handle.\n");
         return FALSE;
 	}
 
-    status = DeviceIoControl(hDevice,
+    status = DeviceIoControl(deviceHandleMap[index],
         US4OEM_WIN32_IOCTL_GET_DRIVER_INFO,
         NULL,
         0,
@@ -350,7 +283,7 @@ Us4OemGetDriverInfo()
         NULL);
     if (status == FALSE) {
         printf("DeviceIoControl failed 0x%x\n", GetLastError());
-        CloseHandle(hDevice);
+        CloseHandle(deviceHandleMap[index]);
         return status;
     }
 
@@ -373,9 +306,9 @@ Us4OemGetDriverInfo()
 	}
 	std::cout << std::endl;
 
-    if (hDevice != INVALID_HANDLE_VALUE && hDevice != 0) {
-        CloseHandle(hDevice);
-        hDevice = INVALID_HANDLE_VALUE;
+    if (deviceHandleMap.count(index) != 0 || deviceHandleMap[index] != INVALID_HANDLE_VALUE && deviceHandleMap[index] != 0) {
+        CloseHandle(deviceHandleMap[index]);
+        deviceHandleMap[index] = INVALID_HANDLE_VALUE;
     }
 
     return status;
@@ -384,7 +317,12 @@ Us4OemGetDriverInfo()
 int main() {
 	std::cout << "Hello, World!" << std::endl;
 
-    Us4OemGetDriverInfo();
+    GetDeviceCount();
+
+    for (int i = 0; i < count; i++) {
+		std::cout << "=== Device " << i << " ===" << std::endl;
+        Us4OemGetDriverInfo(i);
+	}
 
 	return 0;
 }
