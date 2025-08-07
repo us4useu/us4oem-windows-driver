@@ -43,8 +43,6 @@ GetDeviceCount() {
     // decrement the count to get the true device count.
     //
     count--;
-
-    printf("Found %d us4oem devices.\n", count);
 }
 
 BOOL
@@ -285,6 +283,7 @@ Us4OemGetDriverInfo(int index)
     if (status == FALSE) {
         printf("DeviceIoControl failed 0x%x\n", GetLastError());
         CloseHandle(deviceHandleMap[index]);
+        deviceHandleMap[index] = INVALID_HANDLE_VALUE;
         return status;
     }
 
@@ -313,6 +312,61 @@ Us4OemGetDriverInfo(int index)
     }
 
     return status;
+}
+
+PVOID 
+Us4OemMapBar(int deviceIndex, uint8_t bar, unsigned long size_limit) {
+    BOOL status = TRUE;
+    us4oem_mmap_response outBuffer;
+    us4oem_mmap_argument inBuffer;
+    DWORD bytesReceived = 0;
+
+    memset(&inBuffer, 0, sizeof(inBuffer));
+    memset(&outBuffer, 0, sizeof(outBuffer));
+
+    inBuffer.area = bar == 0 ? MMAP_AREA_BAR_0 : MMAP_AREA_BAR_4;
+    inBuffer.length_limit = size_limit;
+
+    if (deviceHandleMap.count(deviceIndex) == 0 || deviceHandleMap[deviceIndex] == INVALID_HANDLE_VALUE) {
+        status = GetDeviceHandle(deviceIndex);
+        if (status == FALSE) {
+            return NULL;
+        }
+    }
+
+    if (deviceHandleMap[deviceIndex] == 0) {
+        printf("Invalid device handle.\n");
+        return NULL;
+    }
+
+    status = DeviceIoControl(deviceHandleMap[deviceIndex],
+        US4OEM_WIN32_IOCTL_MMAP,
+        &inBuffer,
+        sizeof(inBuffer),
+        &outBuffer,
+        sizeof(outBuffer),
+        &bytesReceived,
+        NULL);
+    if (status == FALSE) {
+        printf("DeviceIoControl failed 0x%x\n", GetLastError());
+        CloseHandle(deviceHandleMap[deviceIndex]);
+        deviceHandleMap[deviceIndex] = INVALID_HANDLE_VALUE;
+        return NULL;
+    }
+
+    std::cout << "Bytes received: " << bytesReceived << std::endl;
+    std::cout << "Address received: 0x" << std::hex << outBuffer.address << std::endl;
+    std::cout << "Length mapped: 0x" << std::hex << outBuffer.length_mapped << std::endl;
+
+    // Read offset 0
+    std::cout << "@ offset 0: 0x" << std::hex << *(int*)(outBuffer.address) << std::endl;
+
+    if (deviceHandleMap.count(deviceIndex) != 0 || deviceHandleMap[deviceIndex] != INVALID_HANDLE_VALUE && deviceHandleMap[deviceIndex] != 0) {
+        CloseHandle(deviceHandleMap[deviceIndex]);
+        deviceHandleMap[deviceIndex] = INVALID_HANDLE_VALUE;
+    }
+
+    return outBuffer.address;
 }
 
 int main() {
@@ -376,6 +430,26 @@ int main() {
     }
     for (int i = 0; i < 2; i++) {
         CloseHandle(handles[i]);
+    }
+
+	std::cout << std::endl << "====== Memory Mapping Test ======" << std::endl;
+   
+    for (int i = 0; i < count; i++) {
+        std::cout << "Mapping BAR 4 for device " << i << "..." << std::endl;
+        if (Us4OemMapBar(i, 4, 0)) {
+            std::cout << "success" << std::endl;
+        }
+        else {
+            std::cout << "fail" << std::endl;
+        }
+
+        std::cout << "Mapping BAR 0 for device " << i << "..." << std::endl;
+        if (Us4OemMapBar(i, 0, 0)) {
+            std::cout << "success" << std::endl;
+        }
+        else {
+            std::cout << "fail" << std::endl;
+        }
     }
 
 	return 0;

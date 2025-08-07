@@ -13,6 +13,7 @@ us4oemCreateDevice(
     WDF_OBJECT_ATTRIBUTES deviceAttributes;
 	WDF_OBJECT_ATTRIBUTES fileAttributes;
     WDF_FILEOBJECT_CONFIG fileConfig;
+    WDF_PNPPOWER_EVENT_CALLBACKS pnpPowerCallbacks;
     PUS4OEM_CONTEXT deviceContext;
     WDFDEVICE device;
     NTSTATUS status;
@@ -38,10 +39,23 @@ us4oemCreateDevice(
     // Create device
     WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&deviceAttributes, US4OEM_CONTEXT);
 
+	// We want unbuffered I/O for this device (for performance)
+    WdfDeviceInitSetIoType(DeviceInit, WdfDeviceIoDirect);
+
+	// Initialize PnP callbacks, as we need them to map HW resources
+    WDF_PNPPOWER_EVENT_CALLBACKS_INIT(&pnpPowerCallbacks);
+	pnpPowerCallbacks.EvtDevicePrepareHardware = us4oemEvtDevicePrepareHardware;
+	pnpPowerCallbacks.EvtDeviceReleaseHardware = us4oemEvtDeviceReleaseHardware;
+
+    WdfDeviceInitSetPnpPowerEventCallbacks(DeviceInit, &pnpPowerCallbacks);
+
     status = WdfDeviceCreate(&DeviceInit, &deviceAttributes, &device);
 
     if (NT_SUCCESS(status)) {
         deviceContext = us4oemGetContext(device);
+
+		// Initialize the device context
+		RtlZeroMemory(deviceContext, sizeof(US4OEM_CONTEXT));
 
         status = WdfDeviceCreateDeviceInterface(
             device,

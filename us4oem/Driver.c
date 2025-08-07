@@ -90,3 +90,85 @@ us4oemEvtDriverContextCleanup(
     //
     WPP_CLEANUP(WdfDriverWdmGetDriverObject((WDFDRIVER)DriverObject));
 }
+
+NTSTATUS
+us4oemEvtDevicePrepareHardware(
+    WDFDEVICE      Device,
+    WDFCMRESLIST   Resources,
+    WDFCMRESLIST   ResourcesTranslated
+) {
+    UNREFERENCED_PARAMETER(Resources);
+
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR descriptor;
+    PUS4OEM_CONTEXT deviceContext = us4oemGetContext(Device);
+
+    // We expect to find three resources: IRQ, PCIDMA memory (512 KiB) @ BAR 0 and us4oem memory (64 MiB) @ BAR 4
+
+    for (ULONG i = 0; i < WdfCmResourceListGetCount(ResourcesTranslated); i++) {
+
+        descriptor = WdfCmResourceListGetDescriptor(ResourcesTranslated, i);
+
+        if (!descriptor) {
+            TraceEvents(TRACE_LEVEL_ERROR, TRACE_DRIVER, "%!FUNC! WdfCmResourceListGetDescriptor failed");
+            return STATUS_DEVICE_CONFIGURATION_ERROR;
+        }
+
+        PBAR_INFO bar = NULL;
+
+        switch (descriptor->Type) {
+            case CmResourceTypeMemory:
+                if (descriptor->u.Memory.Length == PCIDMA_REGION_LENGTH) {
+                    bar = &deviceContext->BarPciDma;
+                }
+                else if (descriptor->u.Memory.Length == US4OEM_REGION_LENGTH) {
+                    bar = &deviceContext->BarUs4Oem;
+                }
+                else {
+                    break;
+                }
+
+                // Save physical address and length
+                bar->BaseAddr = descriptor->u.Memory.Start;
+                bar->Length = descriptor->u.Memory.Length;
+
+				// Map the memory to the device context
+                bar->MappedAddress = MmMapIoSpace(
+                    bar->BaseAddr,
+                    bar->Length,
+                    MmNonCached
+				);
+
+                bar = NULL;
+					
+                break;
+            case CmResourceTypeInterrupt:
+				// TODO: Handle interrupts
+                break;
+        }
+    }
+
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+us4oemEvtDeviceReleaseHardware(
+    IN  WDFDEVICE    Device,
+    IN  WDFCMRESLIST ResourcesTranslated
+) {
+	UNREFERENCED_PARAMETER(ResourcesTranslated);
+
+	// Unmap every mapped BAR
+	PUS4OEM_CONTEXT deviceContext = us4oemGetContext(Device);
+
+    if (deviceContext->BarPciDma.MappedAddress) {
+        MmUnmapIoSpace(deviceContext->BarPciDma.MappedAddress, deviceContext->BarPciDma.Length);
+    }
+
+    if (deviceContext->BarUs4Oem.MappedAddress) {
+        MmUnmapIoSpace(deviceContext->BarUs4Oem.MappedAddress, deviceContext->BarUs4Oem.Length);
+    }
+
+	TraceEvents(TRACE_LEVEL_INFORMATION, TRACE_DRIVER, "%!FUNC! Device hardware released");
+
+    return STATUS_SUCCESS;
+}

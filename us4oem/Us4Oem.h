@@ -4,9 +4,22 @@
 
 EXTERN_C_START
 
+// Used for identification of BAR regions
+#define PCIDMA_REGION_LENGTH 0x200
+#define US4OEM_REGION_LENGTH 0x4000000
+
+typedef struct _BAR_INFO
+{
+    PHYSICAL_ADDRESS BaseAddr;
+    ULONG Length;
+
+	PVOID MappedAddress; // This is the virtual address after mapping the BAR
+} BAR_INFO, *PBAR_INFO;
+
 typedef struct _US4OEM_CONTEXT
 {
-    ULONG PrivateDeviceData;  // placeholder
+    BAR_INFO BarPciDma;
+    BAR_INFO BarUs4Oem;
 
 } US4OEM_CONTEXT, *PUS4OEM_CONTEXT;
 
