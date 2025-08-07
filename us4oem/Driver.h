@@ -1,3 +1,5 @@
+#pragma once
+
 #include <ntddk.h>
 #include <wdf.h>
 #include <initguid.h>
@@ -5,6 +7,7 @@
 #include "us4oem.h"
 #include "queue.h"
 #include "trace.h"
+#include "char.h"
 
 EXTERN_C_START
 

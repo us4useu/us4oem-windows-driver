@@ -33,8 +33,15 @@ us4oem.sys  = 1,,
 [us4oem_Device.NT]
 CopyFiles = File_Copy
 
+[us4oem_Device.NT.hw]
+AddReg = Reg_Add
+
 [File_Copy]
 us4oem.sys
+
+[Reg_Add]
+; Exclusive access
+HKR,,Exclusive,0x10001,1
 
 ;-------------- Service installation
 [us4oem_Device.NT.Services]

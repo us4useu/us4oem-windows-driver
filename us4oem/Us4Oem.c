@@ -11,20 +11,37 @@ us4oemCreateDevice(
     )
 {
     WDF_OBJECT_ATTRIBUTES deviceAttributes;
+	WDF_OBJECT_ATTRIBUTES fileAttributes;
+    WDF_FILEOBJECT_CONFIG fileConfig;
     PUS4OEM_CONTEXT deviceContext;
     WDFDEVICE device;
     NTSTATUS status;
 
     PAGED_CODE();
 
+    // Create file
+    WDF_FILEOBJECT_CONFIG_INIT(
+        &fileConfig,
+        us4oemEvtDeviceFileCreate,
+        us4oemEvtFileClose,
+        WDF_NO_EVENT_CALLBACK
+        );
+
+    WDF_OBJECT_ATTRIBUTES_INIT(&fileAttributes);
+
+    WdfDeviceInitSetFileObjectConfig(
+        DeviceInit,
+        &fileConfig,
+        &fileAttributes
+    );
+
+    // Create device
     WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&deviceAttributes, US4OEM_CONTEXT);
 
     status = WdfDeviceCreate(&DeviceInit, &deviceAttributes, &device);
 
     if (NT_SUCCESS(status)) {
         deviceContext = us4oemGetContext(device);
-
-        deviceContext->PrivateDeviceData = 0;
 
         status = WdfDeviceCreateDeviceInterface(
             device,

@@ -19,11 +19,13 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Char.c" />
     <ClCompile Include="Us4Oem.c" />
     <ClCompile Include="Driver.c" />
     <ClCompile Include="Queue.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Char.h" />
     <ClInclude Include="Us4Oem.h" />
     <ClInclude Include="Driver.h" />
     <ClInclude Include="Us4OemAPI.h" />

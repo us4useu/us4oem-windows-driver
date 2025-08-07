@@ -237,7 +237,7 @@ GetDeviceHandle(int index)
         //
         deviceHandleMap[index] = CreateFile(deviceInterfaceDetailMap[index]->DevicePath,
             GENERIC_READ | GENERIC_WRITE,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            NULL,
             NULL,
             OPEN_EXISTING,
             0,
@@ -247,6 +247,7 @@ GetDeviceHandle(int index)
             status = FALSE;
             printf("CreateFile failed.  Error:%u", GetLastError());
         }
+
     }
 
     return status;
@@ -315,14 +316,67 @@ Us4OemGetDriverInfo(int index)
 }
 
 int main() {
-	std::cout << "Hello, World!" << std::endl;
-
     GetDeviceCount();
 
+	std::cout << "Found " << count << " us4oem devices." << std::endl << std::endl;
+    
+    if (count == 0) return 1;
+
+	std::cout << std::endl << "====== IOCTL Test ======" << std::endl;
     for (int i = 0; i < count; i++) {
 		std::cout << "=== Device " << i << " ===" << std::endl;
         Us4OemGetDriverInfo(i);
 	}
+
+    std::cout << std::endl << "====== Exclusive Access Test ======" << std::endl;
+    std::cout << "Trying without closing handles (this should fail on the second attempt)" << std::endl;
+    std::vector<HANDLE> handles;
+    for (int i = 0; i < 2; i++) {
+        std::cout << "Opening device 0 for acccess, i=" << i << "... ";
+        handles.push_back(CreateFile(deviceInterfaceDetailMap[0]->DevicePath,
+            GENERIC_READ | GENERIC_WRITE,
+            // In a real client for this driver we should explicitly not share the file acccess,
+            // however we shouldn't rely on the user to implement safeguards that should already be there,
+            // so this tests the worst-case scenario.
+            FILE_SHARE_READ | FILE_SHARE_WRITE, 
+            NULL,
+            OPEN_EXISTING,
+            0,
+            NULL));
+
+        if (handles[i] == INVALID_HANDLE_VALUE) {
+            std::cout << "fail" << std::endl;
+        }
+        else {
+            std::cout << "success" << std::endl;
+        }
+    }
+    for (int i = 0; i < 2; i++) {
+        CloseHandle(handles[i]);
+    }
+
+    std::cout << "Trying with closing handles (this should NOT fail on the second attempt)" << std::endl;
+    for (int i = 0; i < 2; i++) {
+        std::cout << "Opening device 0 for acccess, i=" << i << "... ";
+        HANDLE h = CreateFile(deviceInterfaceDetailMap[0]->DevicePath,
+            GENERIC_READ | GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            NULL,
+            OPEN_EXISTING,
+            0,
+            NULL);
+
+        if (h == INVALID_HANDLE_VALUE) {
+            std::cout << "fail" << std::endl;
+        }
+        else {
+            std::cout << "success" << std::endl;
+            CloseHandle(h);
+        }
+    }
+    for (int i = 0; i < 2; i++) {
+        CloseHandle(handles[i]);
+    }
 
 	return 0;
 }

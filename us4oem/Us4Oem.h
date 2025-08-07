@@ -1,3 +1,5 @@
+#pragma once
+
 #include "us4oemapi.h"
 
 EXTERN_C_START

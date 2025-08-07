@@ -39,6 +39,9 @@
     <ClInclude Include="Us4OemAPI.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Char.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Us4Oem.c">
@@ -48,6 +51,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Queue.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Char.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

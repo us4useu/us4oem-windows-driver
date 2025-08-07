@@ -1,5 +1,6 @@
 // This file is shared between user mode and kernel mode.
 // No kernel mode specific code should be added here.
+#pragma once
 
 #ifndef DONT_INCLUDE_INITGUID
 // This header is needed for GUIDs to work properly in win32 user mode applications,

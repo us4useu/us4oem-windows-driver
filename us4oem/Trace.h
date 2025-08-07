@@ -1,3 +1,5 @@
+#pragma once
+
 //
 // Define the tracing flags.
 //
