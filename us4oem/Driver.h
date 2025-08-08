@@ -10,6 +10,7 @@
 #include "trace.h"
 #include "char.h"
 #include "interrupt.h"
+#include "ioctl.h"
 
 EXTERN_C_START
 
