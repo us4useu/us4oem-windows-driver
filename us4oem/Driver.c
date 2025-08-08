@@ -114,6 +114,7 @@ us4oemEvtDevicePrepareHardware(
         }
 
         PBAR_INFO bar = NULL;
+        WDF_INTERRUPT_CONFIG interruptConfig;
 
         switch (descriptor->Type) {
             case CmResourceTypeMemory:
@@ -142,7 +143,23 @@ us4oemEvtDevicePrepareHardware(
 					
                 break;
             case CmResourceTypeInterrupt:
-				// TODO: Handle interrupts
+                WDF_INTERRUPT_CONFIG_INIT(&interruptConfig, Us4OemInterruptIsr, Us4OemInterruptDpc);
+
+                interruptConfig.InterruptTranslated = WdfCmResourceListGetDescriptor(ResourcesTranslated, i);
+                interruptConfig.InterruptRaw = WdfCmResourceListGetDescriptor(Resources, i);
+
+                NTSTATUS status = WdfInterruptCreate(
+                    Device,
+                    &interruptConfig,
+                    WDF_NO_OBJECT_ATTRIBUTES,
+                    &deviceContext->Interrupt);
+                if (!NT_SUCCESS(status))
+                {
+                    TraceEvents(TRACE_LEVEL_ERROR, TRACE_DRIVER,
+                        "WdfInterruptCreate failed. status: %!STATUS!", status);
+                    return STATUS_DEVICE_CONFIGURATION_ERROR;
+                }
+
                 break;
         }
     }

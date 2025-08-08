@@ -9,6 +9,7 @@
 #include "queue.h"
 #include "trace.h"
 #include "char.h"
+#include "interrupt.h"
 
 EXTERN_C_START
 

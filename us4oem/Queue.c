@@ -236,7 +236,25 @@ us4oemEvtIoDeviceControl(
             WdfRequestCompleteWithInformation(Request, STATUS_SUCCESS, sizeof(us4oem_mmap_response));
             return;
 		}
+        case US4OEM_WIN32_IOCTL_READ_STATS:
+        {
+            // Check if there's enough space in the output buffer
+            if (OutputBufferLength < sizeof(us4oem_stats)) {
+                TraceEvents(TRACE_LEVEL_ERROR,
+                    TRACE_QUEUE,
+                    "OutputBufferLength %d is too small for us4oem_stats",
+                    (int)OutputBufferLength);
+                WdfRequestComplete(Request, STATUS_BUFFER_TOO_SMALL);
+                return;
+            }
 
+			PUS4OEM_CONTEXT deviceContext = us4oemGetContext(WdfIoQueueGetDevice(Queue));
+
+            // Copy the stats to the output buffer
+            RtlCopyMemory(OutputBuffer, &deviceContext->Stats, sizeof(us4oem_stats));
+            WdfRequestCompleteWithInformation(Request, STATUS_SUCCESS, sizeof(us4oem_stats));
+			return;
+        }
         default:
         {
             TraceEvents(TRACE_LEVEL_ERROR,

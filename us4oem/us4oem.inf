@@ -42,6 +42,8 @@ us4oem.sys
 [Reg_Add]
 ; Exclusive access
 HKR,,Exclusive,0x10001,1
+; Use MSI when supported
+HKR,Interrupt Management\MessageSignaledInterruptProperties,MSISupported,0x10001,1
 
 ;-------------- Service installation
 [us4oem_Device.NT.Services]

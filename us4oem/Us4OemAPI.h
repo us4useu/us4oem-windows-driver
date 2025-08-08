@@ -27,6 +27,12 @@ DEFINE_GUID (GUID_DEVINTERFACE_us4oem,
 #define US4OEM_WIN32_IOCTL_MMAP \
     CTL_CODE(FILE_DEVICE_UNKNOWN, US4OEM_WIN32_IOCTL_BASE + 1, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
+// Read statistics from the device. Returns us4oem_stats in the output buffer.
+#define US4OEM_WIN32_IOCTL_READ_STATS \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, US4OEM_WIN32_IOCTL_BASE + 2, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+// ====== Memory Mapping Area Definitions ======
+
 typedef enum _us4oem_mmap_area {
     MMAP_AREA_BAR_0 = 0, // BAR 0 ("PCIDMA", 512 KiB = 0x0200)
     MMAP_AREA_BAR_4 = 1, // BAR 4 ("US4OEM", 64 MiB = 0x0400_0000)
@@ -45,3 +51,10 @@ typedef struct _us4oem_mmap_response {
     void* address;
     unsigned long length_mapped;
 } us4oem_mmap_response;
+
+
+typedef struct _us4oem_stats
+{
+    unsigned long irq_count; // Total number of IRQs handled
+
+} us4oem_stats;

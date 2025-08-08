@@ -369,6 +369,54 @@ Us4OemMapBar(int deviceIndex, uint8_t bar, unsigned long size_limit) {
     return outBuffer.address;
 }
 
+BOOL
+Us4OemReadStats(int index)
+{
+    BOOL status = TRUE;
+    us4oem_stats outBuffer;
+    DWORD bytesReceived = 0;
+
+    memset(&outBuffer, 0, sizeof(outBuffer));
+
+    if (deviceHandleMap.count(index) == 0 || deviceHandleMap[index] == INVALID_HANDLE_VALUE) {
+        status = GetDeviceHandle(index);
+        if (status == FALSE) {
+            return status;
+        }
+    }
+
+    if (deviceHandleMap[index] == 0) {
+        printf("Invalid device handle.\n");
+        return FALSE;
+    }
+
+    status = DeviceIoControl(deviceHandleMap[index],
+        US4OEM_WIN32_IOCTL_READ_STATS,
+        NULL,
+        0,
+        &outBuffer,
+        sizeof(outBuffer),
+        &bytesReceived,
+        NULL);
+    if (status == FALSE) {
+        printf("DeviceIoControl failed 0x%x\n", GetLastError());
+        CloseHandle(deviceHandleMap[index]);
+        deviceHandleMap[index] = INVALID_HANDLE_VALUE;
+        return status;
+    }
+
+    std::cout << "Stats: " << std::endl;
+	std::cout << "  IRQ count: " << outBuffer.irq_count << std::endl;
+    std::cout << std::endl;
+
+    if (deviceHandleMap.count(index) != 0 || deviceHandleMap[index] != INVALID_HANDLE_VALUE && deviceHandleMap[index] != 0) {
+        CloseHandle(deviceHandleMap[index]);
+        deviceHandleMap[index] = INVALID_HANDLE_VALUE;
+    }
+
+    return status;
+}
+
 int main() {
     GetDeviceCount();
 
@@ -434,9 +482,15 @@ int main() {
 
 	std::cout << std::endl << "====== Memory Mapping Test ======" << std::endl;
    
+    void* dev0bar4 = NULL;
+
     for (int i = 0; i < count; i++) {
         std::cout << "Mapping BAR 4 for device " << i << "..." << std::endl;
-        if (Us4OemMapBar(i, 4, 0)) {
+        void* bar4addr = NULL;
+        if ((bar4addr = Us4OemMapBar(i, 4, 0))) {
+            if (i == 0) {
+                dev0bar4 = bar4addr; // Save the address of BAR 4 for device 0
+			}
             std::cout << "success" << std::endl;
         }
         else {
@@ -451,6 +505,47 @@ int main() {
             std::cout << "fail" << std::endl;
         }
     }
+
+    if (dev0bar4 == NULL) {
+        std::cout << "Failed to map BAR 4 for device 0." << std::endl;
+        return 1;
+	}
+
+    std::cout << std::endl << "====== IRQ Test ======" << std::endl;
+
+    std::cout << "Testing device 0..." << std::endl;
+       
+	// Read the IRQ count before the test
+    Us4OemReadStats(0);
+    std::cout << "Asserting IRQ..." << std::endl;
+
+	/* 
+    Simulate an IRQ by writing to the mapped BAR 4 for the device
+    
+    From the QEMU model's mem_write handler:
+
+	switch (offset) {
+    [...]
+    case 0x60:
+        us4oem_raise_irq(us4oem, val);
+        break;
+    case 0x64:
+        us4oem_lower_irq(us4oem, val);
+        break;
+    [...]
+    }
+    */
+
+    ((int*)dev0bar4)[0x60/sizeof(int)] = 0x01;
+	std::cout << "IRQ asserted." << std::endl;
+	((int*)dev0bar4)[0x64/sizeof(int)] = 0x01;
+	std::cout << "IRQ cleared." << std::endl;
+
+	// Sleep for a short while to allow the DPC to execute
+	Sleep(10);
+
+    // Read the IRQ count after the test
+    Us4OemReadStats(0);
 
 	return 0;
 }

@@ -16,10 +16,16 @@ typedef struct _BAR_INFO
 	PVOID MappedAddress; // This is the virtual address after mapping the BAR
 } BAR_INFO, *PBAR_INFO;
 
+
+
 typedef struct _US4OEM_CONTEXT
 {
     BAR_INFO BarPciDma;
     BAR_INFO BarUs4Oem;
+
+	WDFINTERRUPT Interrupt; // Interrupt object for the device
+
+    us4oem_stats Stats; // Statistics for the device
 
 } US4OEM_CONTEXT, *PUS4OEM_CONTEXT;
 
