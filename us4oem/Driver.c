@@ -5,6 +5,8 @@
 #pragma alloc_text (INIT, DriverEntry)
 #pragma alloc_text (PAGE, us4oemEvtDeviceAdd)
 #pragma alloc_text (PAGE, us4oemEvtDriverContextCleanup)
+#pragma alloc_text (PAGE, us4oemEvtDevicePrepareHardware)
+#pragma alloc_text (PAGE, us4oemEvtDeviceReleaseHardware)
 #endif
 
 NTSTATUS
@@ -99,6 +101,8 @@ us4oemEvtDevicePrepareHardware(
 ) {
     UNREFERENCED_PARAMETER(Resources);
 
+    PAGED_CODE();
+
     PCM_PARTIAL_RESOURCE_DESCRIPTOR descriptor;
     PUS4OEM_CONTEXT deviceContext = us4oemGetContext(Device);
 
@@ -173,6 +177,8 @@ us4oemEvtDeviceReleaseHardware(
     IN  WDFCMRESLIST ResourcesTranslated
 ) {
 	UNREFERENCED_PARAMETER(ResourcesTranslated);
+
+    PAGED_CODE();
 
 	// Unmap every mapped BAR
 	PUS4OEM_CONTEXT deviceContext = us4oemGetContext(Device);

@@ -1,6 +1,11 @@
 #include "char.h"
 #include "char.tmh"
 
+#ifdef ALLOC_PRAGMA
+#pragma alloc_text (PAGE, us4oemEvtDeviceFileCreate)
+#pragma alloc_text (PAGE, us4oemEvtFileClose)
+#endif
+
 VOID
 us4oemEvtDeviceFileCreate(
 	_In_ WDFDEVICE Device,
@@ -11,6 +16,8 @@ us4oemEvtDeviceFileCreate(
 	UNREFERENCED_PARAMETER(FileObject);
 	UNREFERENCED_PARAMETER(Device);
 
+	PAGED_CODE();
+
 	WdfRequestComplete(Request, STATUS_SUCCESS);
 }
 
@@ -20,6 +27,8 @@ us4oemEvtFileClose(
 	)
 {
 	UNREFERENCED_PARAMETER(FileObject);
+
+	PAGED_CODE();
 
 	TraceEvents(TRACE_LEVEL_INFORMATION,
 		TRACE_QUEUE,

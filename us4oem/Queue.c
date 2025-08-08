@@ -3,6 +3,8 @@
 
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text (PAGE, us4oemQueueInitialize)
+#pragma alloc_text (PAGE, us4oemEvtIoDeviceControl)
+#pragma alloc_text (PAGE, us4oemEvtIoStop)
 #endif
 
 NTSTATUS
@@ -56,6 +58,8 @@ us4oemEvtIoDeviceControl(
     PVOID OutputBuffer = NULL;
 	PVOID InputBuffer = NULL;
     NTSTATUS Status;
+
+    PAGED_CODE();
 
     TraceEvents(TRACE_LEVEL_INFORMATION,
         TRACE_QUEUE,
@@ -278,6 +282,8 @@ us4oemEvtIoStop(
     _In_ ULONG ActionFlags
 )
 {
+    PAGED_CODE();
+
     TraceEvents(TRACE_LEVEL_INFORMATION, 
                 TRACE_QUEUE, 
                 "%!FUNC! Queue 0x%p, Request 0x%p ActionFlags %d", 
