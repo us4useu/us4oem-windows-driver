@@ -5,6 +5,9 @@
 #pragma alloc_text (PAGE, us4oemIoctlGetDriverInfo)
 #pragma alloc_text (PAGE, us4oemIoctlMmap)
 #pragma alloc_text (PAGE, us4oemIoctlReadStats)
+#pragma alloc_text (PAGE, us4oemIoctlPoll)
+#pragma alloc_text (PAGE, us4oemIoctlPollNonBlocking)
+#pragma alloc_text (PAGE, us4oemIoctlClearPending)
 #endif
 
 #define DRIVER_INFO_STRING "us4oem win32 driver"
@@ -27,6 +30,24 @@ IOCTL_HANDLER handlers[] = {
         0, // No input buffer needed
         sizeof(us4oem_stats), // Output buffer size
         us4oemIoctlReadStats
+    },
+    {
+        US4OEM_WIN32_IOCTL_POLL,
+        0, // No input buffer needed
+        0, // No output buffer needed
+        us4oemIoctlPoll
+    },
+    {
+        US4OEM_WIN32_IOCTL_POLL_NONBLOCKING,
+        0, // No input buffer needed
+        0, // No output buffer needed
+		us4oemIoctlPollNonBlocking
+    },
+    {
+        US4OEM_WIN32_IOCTL_CLEAR_PENDING,
+        0, // No input buffer needed
+        0, // No output buffer needed
+        us4oemIoctlClearPending
     }
 };
 
@@ -56,6 +77,81 @@ VOID us4oemIoctlGetDriverInfo(
         driverInfo);
 
     WdfRequestCompleteWithInformation(Request, STATUS_SUCCESS, sizeof(driverInfo));
+}
+
+VOID us4oemIoctlPoll(
+    WDFDEVICE Device, WDFREQUEST Request, PVOID OutputBuffer, PVOID InputBuffer
+) {
+    UNREFERENCED_PARAMETER(InputBuffer);
+    UNREFERENCED_PARAMETER(OutputBuffer);
+
+    PAGED_CODE();
+
+    PUS4OEM_CONTEXT deviceContext = us4oemGetContext(Device);
+
+	// If there are IRQs left to be processed, we can complete the request immediately
+    if (deviceContext->Stats.irq_pending_count > 0) {
+        TraceEvents(TRACE_LEVEL_INFORMATION,
+            TRACE_IOCTL,
+            "IRQ pending count is %d, completing request immediately",
+            deviceContext->Stats.irq_pending_count);
+        WdfRequestComplete(Request, STATUS_SUCCESS);
+        deviceContext->Stats.irq_pending_count--;
+        return;
+	}
+
+    // Wait for the interrupt to be signaled
+    if (deviceContext->PendingRequest) {
+        TraceEvents(TRACE_LEVEL_WARNING,
+            TRACE_IOCTL,
+            "A request is already pending, completing with STATUS_DEVICE_BUSY");
+        WdfRequestComplete(Request, STATUS_DEVICE_BUSY);
+        return;
+    }
+    deviceContext->PendingRequest = Request;
+}
+
+VOID us4oemIoctlPollNonBlocking(
+    WDFDEVICE Device, WDFREQUEST Request, PVOID OutputBuffer, PVOID InputBuffer
+) {
+    UNREFERENCED_PARAMETER(InputBuffer);
+    UNREFERENCED_PARAMETER(OutputBuffer);
+
+    PAGED_CODE();
+
+    PUS4OEM_CONTEXT deviceContext = us4oemGetContext(Device);
+
+    // If there are IRQs left to be processed, we can complete the request immediately
+    if (deviceContext->Stats.irq_pending_count > 0) {
+        TraceEvents(TRACE_LEVEL_INFORMATION,
+            TRACE_IOCTL,
+            "IRQ pending count is %d, completing request immediately",
+            deviceContext->Stats.irq_pending_count);
+        WdfRequestComplete(Request, STATUS_SUCCESS);
+        deviceContext->Stats.irq_pending_count--;
+        return;
+    }
+    // No pending IRQs, complete with STATUS_DEVICE_BUSY
+    TraceEvents(TRACE_LEVEL_INFORMATION,
+        TRACE_IOCTL,
+        "No pending IRQs, completing request with STATUS_DEVICE_BUSY");
+    WdfRequestComplete(Request, STATUS_DEVICE_BUSY);
+}
+
+VOID us4oemIoctlClearPending(
+    WDFDEVICE Device, WDFREQUEST Request, PVOID OutputBuffer, PVOID InputBuffer
+) {
+    UNREFERENCED_PARAMETER(OutputBuffer);
+    UNREFERENCED_PARAMETER(InputBuffer);
+
+    PAGED_CODE();
+
+    PUS4OEM_CONTEXT deviceContext = us4oemGetContext(Device);
+
+    // Clear the pending IRQs
+    deviceContext->Stats.irq_pending_count = 0;
+
+    WdfRequestComplete(Request, STATUS_SUCCESS);
 }
 
 VOID us4oemIoctlMmap(

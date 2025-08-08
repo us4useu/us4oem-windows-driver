@@ -15,8 +15,14 @@ BOOLEAN Us4OemInterruptIsr(IN WDFINTERRUPT Interrupt, IN ULONG MessageID) {
 VOID Us4OemInterruptDpc(IN WDFINTERRUPT Interrupt, IN WDFOBJECT AssociatedObject) {
 	UNREFERENCED_PARAMETER(AssociatedObject);
 	
-	// TODO: Notify user-mode application about the interrupt, for now just increment 
-	// the IRQ count in the device context, as we don't have a sync mechanism yet.
 	PUS4OEM_CONTEXT deviceContext = us4oemGetContext(WdfInterruptGetDevice(Interrupt));
 	deviceContext->Stats.irq_count++;
+	deviceContext->Stats.irq_pending_count++;
+
+	// If there is a pending request, complete it with success
+	if (deviceContext->PendingRequest) {
+		WdfRequestComplete(deviceContext->PendingRequest, STATUS_SUCCESS);
+		deviceContext->PendingRequest = NULL; // Clear the pending request
+		deviceContext->Stats.irq_pending_count--;
+	}
 }

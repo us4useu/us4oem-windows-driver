@@ -24,6 +24,9 @@ typedef struct _IOCTL_HANDLER {
 IOCTL_HANDLER_FUNC us4oemIoctlGetDriverInfo;
 IOCTL_HANDLER_FUNC us4oemIoctlMmap;
 IOCTL_HANDLER_FUNC us4oemIoctlReadStats;
+IOCTL_HANDLER_FUNC us4oemIoctlPoll;
+IOCTL_HANDLER_FUNC us4oemIoctlPollNonBlocking;
+IOCTL_HANDLER_FUNC us4oemIoctlClearPending;
 
 PIOCTL_HANDLER us4oemGetIoctlHandler();
 ULONG us4oemGetIoctlHandlerCount();

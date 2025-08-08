@@ -228,7 +228,7 @@ GetDeviceHandle(int index)
 
     if (status) {
 
-		printf("Device Path: %ls\n", deviceInterfaceDetailMap[index]->DevicePath);
+		//printf("Device Path: %ls\n", deviceInterfaceDetailMap[index]->DevicePath);
 
         //
         //  Get handle to device.
@@ -292,7 +292,7 @@ Us4OemGetDriverInfo(int index)
     std::cout << "hex: ";
 	
     for (DWORD i = 0; i < bytesReceived; i++) {
-        std::cout << std::hex << std::setw(2) << std::setfill('0') << (unsigned int)(outBuffer)[i] << " ";
+        std::cout << std::hex << std::setw(2) << std::setfill('0') << (unsigned int)(outBuffer)[i] << std::dec << " ";
 	}
 	std::cout << std::endl;
 
@@ -355,11 +355,11 @@ Us4OemMapBar(int deviceIndex, uint8_t bar, unsigned long size_limit) {
     }
 
     std::cout << "Bytes received: " << bytesReceived << std::endl;
-    std::cout << "Address received: 0x" << std::hex << outBuffer.address << std::endl;
-    std::cout << "Length mapped: 0x" << std::hex << outBuffer.length_mapped << std::endl;
+    std::cout << "Address received: 0x" << std::hex << outBuffer.address << std::dec << std::endl;
+    std::cout << "Length mapped: 0x" << std::hex << outBuffer.length_mapped << std::dec << std::endl;
 
     // Read offset 0
-    std::cout << "@ offset 0: 0x" << std::hex << *(int*)(outBuffer.address) << std::endl;
+    std::cout << "@ offset 0: 0x" << std::hex << *(int*)(outBuffer.address) << std::dec << std::endl;
 
     if (deviceHandleMap.count(deviceIndex) != 0 || deviceHandleMap[deviceIndex] != INVALID_HANDLE_VALUE && deviceHandleMap[deviceIndex] != 0) {
         CloseHandle(deviceHandleMap[deviceIndex]);
@@ -407,7 +407,133 @@ Us4OemReadStats(int index)
 
     std::cout << "Stats: " << std::endl;
 	std::cout << "  IRQ count: " << outBuffer.irq_count << std::endl;
+	std::cout << "  IRQ pending count: " << outBuffer.irq_pending_count << std::endl;
     std::cout << std::endl;
+
+    if (deviceHandleMap.count(index) != 0 || deviceHandleMap[index] != INVALID_HANDLE_VALUE && deviceHandleMap[index] != 0) {
+        CloseHandle(deviceHandleMap[index]);
+        deviceHandleMap[index] = INVALID_HANDLE_VALUE;
+    }
+
+    return status;
+}
+
+BOOL
+Us4OemPoll(int index)
+{
+    BOOL status = TRUE;
+
+    if (deviceHandleMap.count(index) == 0 || deviceHandleMap[index] == INVALID_HANDLE_VALUE) {
+        status = GetDeviceHandle(index);
+        if (status == FALSE) {
+            return status;
+        }
+    }
+
+    if (deviceHandleMap[index] == 0) {
+        printf("Invalid device handle.\n");
+        return FALSE;
+    }
+
+	printf("Polling device %d...\n", index);
+    status = DeviceIoControl(deviceHandleMap[index],
+        US4OEM_WIN32_IOCTL_POLL,
+        NULL,
+        0,
+        NULL,
+        0,
+        NULL,
+        NULL);
+    if (status == FALSE) {
+        printf("DeviceIoControl failed 0x%x\n", GetLastError());
+        CloseHandle(deviceHandleMap[index]);
+        deviceHandleMap[index] = INVALID_HANDLE_VALUE;
+        return status;
+    }
+	printf("Device %d polled successfully.\n", index);
+
+    if (deviceHandleMap.count(index) != 0 || deviceHandleMap[index] != INVALID_HANDLE_VALUE && deviceHandleMap[index] != 0) {
+        CloseHandle(deviceHandleMap[index]);
+        deviceHandleMap[index] = INVALID_HANDLE_VALUE;
+    }
+
+    return status;
+}
+
+BOOL
+Us4OemPollNonBlocking(int index)
+{
+    BOOL status = TRUE;
+
+    if (deviceHandleMap.count(index) == 0 || deviceHandleMap[index] == INVALID_HANDLE_VALUE) {
+        status = GetDeviceHandle(index);
+        if (status == FALSE) {
+            return status;
+        }
+    }
+
+    if (deviceHandleMap[index] == 0) {
+        printf("Invalid device handle.\n");
+        return FALSE;
+    }
+
+    printf("Polling device %d...\n", index);
+    status = DeviceIoControl(deviceHandleMap[index],
+        US4OEM_WIN32_IOCTL_POLL_NONBLOCKING,
+        NULL,
+        0,
+        NULL,
+        0,
+        NULL,
+        NULL);
+    if (status == FALSE) {
+        printf("DeviceIoControl failed 0x%x\n", GetLastError());
+        CloseHandle(deviceHandleMap[index]);
+        deviceHandleMap[index] = INVALID_HANDLE_VALUE;
+        return status;
+    }
+    printf("Device %d polled successfully.\n", index);
+
+    if (deviceHandleMap.count(index) != 0 || deviceHandleMap[index] != INVALID_HANDLE_VALUE && deviceHandleMap[index] != 0) {
+        CloseHandle(deviceHandleMap[index]);
+        deviceHandleMap[index] = INVALID_HANDLE_VALUE;
+    }
+
+    return status;
+}
+
+BOOL
+Us4OemPollClearPending(int index)
+{
+    BOOL status = TRUE;
+
+    if (deviceHandleMap.count(index) == 0 || deviceHandleMap[index] == INVALID_HANDLE_VALUE) {
+        status = GetDeviceHandle(index);
+        if (status == FALSE) {
+            return status;
+        }
+    }
+
+    if (deviceHandleMap[index] == 0) {
+        printf("Invalid device handle.\n");
+        return FALSE;
+    }
+
+    printf("Clearing pending IRQs on device %d...\n", index);
+    status = DeviceIoControl(deviceHandleMap[index],
+        US4OEM_WIN32_IOCTL_CLEAR_PENDING,
+        NULL,
+        0,
+        NULL,
+        0,
+        NULL,
+        NULL);
+    if (status == FALSE) {
+        printf("DeviceIoControl failed 0x%x\n", GetLastError());
+        CloseHandle(deviceHandleMap[index]);
+        deviceHandleMap[index] = INVALID_HANDLE_VALUE;
+        return status;
+    }
 
     if (deviceHandleMap.count(index) != 0 || deviceHandleMap[index] != INVALID_HANDLE_VALUE && deviceHandleMap[index] != 0) {
         CloseHandle(deviceHandleMap[index]);
@@ -542,10 +668,60 @@ int main() {
 	std::cout << "IRQ cleared." << std::endl;
 
 	// Sleep for a short while to allow the DPC to execute
-	Sleep(10);
+	Sleep(100);
 
     // Read the IRQ count after the test
     Us4OemReadStats(0);
+
+    // Poll Test
+    std::cout << std::endl << "====== Poll Test ======" << std::endl;
+	std::cout << "Polling device 0 for IRQ..." << std::endl;
+
+    Us4OemPoll(0);
+    Us4OemReadStats(0);
+
+	// Raise another IRQ to test the non-blocking poll
+    ((int*)dev0bar4)[0x60 / sizeof(int)] = 0x01;
+    std::cout << "IRQ asserted." << std::endl;
+    ((int*)dev0bar4)[0x64 / sizeof(int)] = 0x01;
+    std::cout << "IRQ cleared." << std::endl;
+    Sleep(100);
+
+	std::cout << "Polling device 0 non-blocking for IRQ (should be successful)..." << std::endl;
+    Us4OemReadStats(0);
+    Us4OemPollNonBlocking(0);
+	Us4OemReadStats(0);
+
+	std::cout << "Polling device 0 non-blocking for IRQ (should be busy)..." << std::endl;
+	Us4OemPollNonBlocking(0);
+    Us4OemReadStats(0);
+
+	// Pending clear test
+	std::cout << std::endl << "====== Clear Pending Test ======" << std::endl;
+    
+    // Generate some pending IRQs
+	((int*)dev0bar4)[0x60 / sizeof(int)] = 0x01;
+	std::cout << "IRQ asserted." << std::endl;
+	((int*)dev0bar4)[0x64 / sizeof(int)] = 0x01;
+	std::cout << "IRQ cleared." << std::endl;
+    Sleep(100);
+
+    Us4OemReadStats(0);
+	std::cout << "Clearing pending IRQs on device 0..." << std::endl;
+    Us4OemPollClearPending(0);
+	Us4OemReadStats(0);
+
+    // Clean up
+    if (dev0bar4) {
+        VirtualFree(dev0bar4, 0, MEM_RELEASE);
+        dev0bar4 = NULL;
+    }
+    for (auto& pair : deviceInterfaceDetailMap) {
+        free(pair.second);
+    }
+    deviceInterfaceDetailMap.clear();
+    deviceHandleMap.clear();
+	SetupDiDestroyDeviceInfoList(hDevInfo);
 
 	return 0;
 }

@@ -31,6 +31,21 @@ DEFINE_GUID (GUID_DEVINTERFACE_us4oem,
 #define US4OEM_WIN32_IOCTL_READ_STATS \
     CTL_CODE(FILE_DEVICE_UNKNOWN, US4OEM_WIN32_IOCTL_BASE + 2, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
+// Synchronization mechanism for user-mode applications to access the device.
+// The request will complete when there's a pending IRQ to be handled, if there's none it will wait
+// until an IRQ is received. Note this might block the thread, so use with caution.
+#define US4OEM_WIN32_IOCTL_POLL \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, US4OEM_WIN32_IOCTL_BASE + 3, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+// Non-blocking version of the above. It will complete immediately if there's a pending IRQ,
+// otherwise it will complete with STATUS_DEVICE_BUSY.
+#define US4OEM_WIN32_IOCTL_POLL_NONBLOCKING \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, US4OEM_WIN32_IOCTL_BASE + 4, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+// Clear pending IRQs. Note that this will not complete any poll requests.
+#define US4OEM_WIN32_IOCTL_CLEAR_PENDING \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, US4OEM_WIN32_IOCTL_BASE + 5, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
 // ====== Memory Mapping Area Definitions ======
 
 typedef enum _us4oem_mmap_area {
@@ -52,9 +67,9 @@ typedef struct _us4oem_mmap_response {
     unsigned long length_mapped;
 } us4oem_mmap_response;
 
-
 typedef struct _us4oem_stats
 {
-    unsigned long irq_count; // Total number of IRQs handled
+    unsigned long irq_count; // Total number of IRQs received
+	unsigned long irq_pending_count; // Number of IRQs pending to be handled
 
 } us4oem_stats;

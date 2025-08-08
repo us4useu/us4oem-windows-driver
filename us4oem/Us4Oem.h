@@ -27,6 +27,8 @@ typedef struct _US4OEM_CONTEXT
 
     us4oem_stats Stats; // Statistics for the device
 
+	WDFREQUEST PendingRequest; // Request that is waiting for an IRQ
+
 } US4OEM_CONTEXT, *PUS4OEM_CONTEXT;
 
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(US4OEM_CONTEXT, us4oemGetContext)
