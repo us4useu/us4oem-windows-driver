@@ -98,7 +98,9 @@ and free()'s it when removing an item from the list. It also free()'s the item i
         Type##_LIST_ENTRY* entry = (Where##Head); \
         while (entry != NULL) { \
             Type##_LIST_ENTRY* next = entry->Next; \
-            __LINKED_LIST_FREE(entry->Item, sizeof(Type)); \
+            if (entry->Item) { \
+                __LINKED_LIST_FREE(entry->Item, sizeof(Type)); \
+            } \
             __LINKED_LIST_FREE(entry, sizeof(Type##_LIST_ENTRY)); \
             entry = next; \
         } \

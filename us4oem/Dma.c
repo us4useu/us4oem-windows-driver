@@ -27,7 +27,9 @@ VOID us4oemIoctlDeallocateAllDmaBuffers(
     }
 
     // Clear the linked list
+#pragma warning(disable: 6387, justification: "I promise the NULL check is there and also I'd just like to say that MSVC sucks")
     LINKED_LIST_CLEAR(WDFCOMMONBUFFER, deviceContext->DmaContiguousBuffers);
+#pragma warning(default: 6387)
     TraceEvents(TRACE_LEVEL_INFORMATION,
         TRACE_IOCTL,
         "Deallocated all DMA buffers");
