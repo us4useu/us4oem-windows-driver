@@ -8,6 +8,9 @@
 #pragma alloc_text (PAGE, us4oemIoctlPoll)
 #pragma alloc_text (PAGE, us4oemIoctlPollNonBlocking)
 #pragma alloc_text (PAGE, us4oemIoctlClearPending)
+#pragma alloc_text (PAGE, us4oemIoctlAllocateDmaContiguousBuffer)
+#pragma alloc_text (PAGE, us4oemIoctlDeallocateContigousDmaBuffer)
+#pragma alloc_text (PAGE, us4oemIoctlDeallocateAllDmaBuffers)
 #endif
 
 #define DRIVER_INFO_STRING "us4oem win32 driver"
@@ -48,6 +51,24 @@ IOCTL_HANDLER handlers[] = {
         0, // No input buffer needed
         0, // No output buffer needed
         us4oemIoctlClearPending
+    },
+    {
+        US4OEM_WIN32_IOCTL_ALLOCATE_DMA_CONTIGIOUS_BUFFER,
+		sizeof(us4oem_dma_allocation_argument), // Input buffer size
+		sizeof(us4oem_dma_contiguous_buffer_response), // Output buffer size
+        us4oemIoctlAllocateDmaContiguousBuffer
+    },
+    {
+        US4OEM_WIN32_IOCTL_DEALLOCATE_DMA_CONTIGIOUS_BUFFER,
+		sizeof(unsigned long long), // Input buffer size - PA of the allocated buffer
+		0, // No output buffer needed
+		us4oemIoctlDeallocateContigousDmaBuffer
+    },
+    {
+        US4OEM_WIN32_IOCTL_DEALLOCATE_ALL_DMA_BUFFERS,
+        0, // No input buffer needed
+        0, // No output buffer needed
+        us4oemIoctlDeallocateAllDmaBuffers
     }
 };
 
@@ -57,6 +78,113 @@ PIOCTL_HANDLER us4oemGetIoctlHandler() {
 
 ULONG us4oemGetIoctlHandlerCount() {
 	return sizeof(handlers) / sizeof(IOCTL_HANDLER);
+}
+
+VOID us4oemIoctlDeallocateAllDmaBuffers(
+    WDFDEVICE Device, WDFREQUEST Request, PVOID OutputBuffer, PVOID InputBuffer
+) {
+    PAGED_CODE();
+
+    UNREFERENCED_PARAMETER(OutputBuffer);
+    UNREFERENCED_PARAMETER(InputBuffer);
+
+	PUS4OEM_CONTEXT deviceContext = us4oemGetContext(Device);
+
+    // Iterate over the linked list of common buffers and delete each one
+    LINKED_LIST_FOR_EACH(WDFCOMMONBUFFER, deviceContext->DmaContiguousBuffers, commonBuffer) {
+        if (commonBuffer->Item != NULL) {
+            WdfObjectDelete(*commonBuffer->Item);
+            deviceContext->Stats.dma_contig_free_count++;
+            deviceContext->Stats.dma_contig_alloc_count--;
+        }
+	}
+
+    // Clear the linked list
+    LINKED_LIST_CLEAR(WDFCOMMONBUFFER, deviceContext->DmaContiguousBuffers);
+    TraceEvents(TRACE_LEVEL_INFORMATION,
+        TRACE_IOCTL,
+        "Deallocated all DMA buffers");
+	WdfRequestComplete(Request, STATUS_SUCCESS);
+}
+
+VOID us4oemIoctlDeallocateContigousDmaBuffer(
+    WDFDEVICE Device, WDFREQUEST Request, PVOID OutputBuffer, PVOID InputBuffer
+) {
+    PAGED_CODE();
+
+	UNREFERENCED_PARAMETER(OutputBuffer);
+
+    long long pa = *(unsigned long long*)InputBuffer;
+    PUS4OEM_CONTEXT deviceContext = us4oemGetContext(Device);
+
+	// Iterate over the contiguous buffers until we find the one with the matching PA
+    LINKED_LIST_FOR_EACH(WDFCOMMONBUFFER, deviceContext->DmaContiguousBuffers, commonBuffer) {
+        if (commonBuffer->Item != NULL && 
+            WdfCommonBufferGetAlignedLogicalAddress(*(commonBuffer->Item)).QuadPart == pa) {
+            // Found the buffer, delete it
+            WdfObjectDelete(*commonBuffer->Item);
+            deviceContext->Stats.dma_contig_free_count++;
+			deviceContext->Stats.dma_contig_alloc_count--;
+            LINKED_LIST_REMOVE(WDFCOMMONBUFFER, deviceContext->DmaContiguousBuffers, commonBuffer);
+            TraceEvents(TRACE_LEVEL_INFORMATION,
+                TRACE_IOCTL,
+                "Deallocated contiguous DMA buffer with PA: 0x%llx",
+                pa);
+            WdfRequestComplete(Request, STATUS_SUCCESS);
+            return;
+        }
+	}
+
+	// Not found, complete with an error
+    TraceEvents(TRACE_LEVEL_ERROR,
+        TRACE_IOCTL,
+        "Failed to find contiguous DMA buffer with PA: 0x%llx",
+        pa);
+    WdfRequestComplete(Request, STATUS_NOT_FOUND);
+}
+
+VOID us4oemIoctlAllocateDmaContiguousBuffer(
+    WDFDEVICE Device, WDFREQUEST Request, PVOID OutputBuffer, PVOID InputBuffer
+) {
+    PAGED_CODE();
+
+	us4oem_dma_allocation_argument* arg = (us4oem_dma_allocation_argument*)InputBuffer;
+
+	PUS4OEM_CONTEXT deviceContext = us4oemGetContext(Device);
+
+	// Allocate memory for the common buffer struct
+    WDFCOMMONBUFFER* commonBuffer = MmAllocateNonCachedMemory(sizeof(WDFCOMMONBUFFER));
+
+    NTSTATUS status = WdfCommonBufferCreate(deviceContext->DmaEnabler,
+        arg->length,
+        WDF_NO_OBJECT_ATTRIBUTES,
+        commonBuffer);
+
+    if (!NT_SUCCESS(status)) {
+        TraceEvents(TRACE_LEVEL_ERROR,
+            TRACE_IOCTL,
+            "WdfCommonBufferCreate failed with status: %!STATUS!",
+            status);
+		MmFreeNonCachedMemory(commonBuffer, sizeof(WDFCOMMONBUFFER));
+        WdfRequestComplete(Request, status);
+        return;
+	}
+
+	us4oem_dma_contiguous_buffer_response* response = (us4oem_dma_contiguous_buffer_response*)OutputBuffer;
+
+	response->va = WdfCommonBufferGetAlignedVirtualAddress(
+        *commonBuffer);
+
+	// PHYSICAL_ADDRESS is technically a union, so we have to get the 64-bit int from QuadPart
+    response->pa = (WdfCommonBufferGetAlignedLogicalAddress(
+        *commonBuffer)).QuadPart;
+
+	// Store information about the allocated buffer in the device context
+	LINKED_LIST_PUSH(WDFCOMMONBUFFER, deviceContext->DmaContiguousBuffers, commonBuffer);
+
+    deviceContext->Stats.dma_contig_alloc_count++;
+
+	WdfRequestCompleteWithInformation(Request, STATUS_SUCCESS, sizeof(us4oem_dma_contiguous_buffer_response));
 }
 
 VOID us4oemIoctlGetDriverInfo(
@@ -174,43 +302,54 @@ VOID us4oemIoctlMmap(
     // Check if the bar index is valid and map the corresponding BAR to user-mode memory.
     PUS4OEM_CONTEXT deviceContext = us4oemGetContext(Device);
 
-    PBAR_INFO bar = NULL;
+	PVOID address = NULL;
+	ULONG length = 0;
 
     switch (arg.area) {
     case MMAP_AREA_BAR_0:
         if (!deviceContext->BarPciDma.MappedAddress) {
             WdfRequestComplete(Request, STATUS_DEVICE_UNREACHABLE);
         }
-        bar = &deviceContext->BarPciDma;
+        address = deviceContext->BarPciDma.MappedAddress;
+        length = deviceContext->BarPciDma.Length;
         break;
     case MMAP_AREA_BAR_4:
         if (!deviceContext->BarUs4Oem.MappedAddress) {
             WdfRequestComplete(Request, STATUS_DEVICE_UNREACHABLE);
         }
-        bar = &deviceContext->BarUs4Oem;
+        address = deviceContext->BarUs4Oem.MappedAddress;
+        length = deviceContext->BarUs4Oem.Length;
         break;
     case MMAP_AREA_DMA:
-        // TODO: Implement
-        WdfRequestComplete(Request, STATUS_NOT_IMPLEMENTED);
-        return;
+        if (!arg.va) {
+            TraceEvents(TRACE_LEVEL_ERROR,
+                TRACE_IOCTL,
+                "Virtual address for DMA area is NULL");
+            WdfRequestComplete(Request, STATUS_INVALID_PARAMETER);
+            return;
+        }
+
+        // For DMA areas, we assume the user has provided a valid virtual address
+        address = arg.va;
+        length = arg.length_limit; // Use the length limit provided by the user
+        break;
     }
 
     // To map the BAR to user-mode we need to:
     // - Build an MDL (MmBuildMdlForNonPagedPool)
     // - Map the MDL to user-mode memory (MmMapLockedPagesSpecifyCache)
 
-#pragma warning(disable: 6011, justification: "there's no case in which bar is NULL and execution gets here")
-    ULONG length = (arg.length_limit != 0 && bar->Length > arg.length_limit) ?
-        arg.length_limit : bar->Length;
+    if (length > arg.length_limit && arg.length_limit != 0) {
+        length = arg.length_limit; // Use the user-provided length limit
+	}
 
     PMDL mdl = IoAllocateMdl(
-        bar->MappedAddress,
+        address,
         length,
         FALSE,
         FALSE,
         NULL
     );
-#pragma warning(default: 6011)
 
     if (!mdl) {
         TraceEvents(TRACE_LEVEL_ERROR,

@@ -191,6 +191,23 @@ us4oemEvtDeviceReleaseHardware(
         MmUnmapIoSpace(deviceContext->BarUs4Oem.MappedAddress, deviceContext->BarUs4Oem.Length);
     }
 
+	// Deallocate all DMA buffers
+    LINKED_LIST_FOR_EACH(WDFCOMMONBUFFER, deviceContext->DmaContiguousBuffers, commonBuffer) {
+        if (commonBuffer->Item != NULL) {
+            WdfObjectDelete(*commonBuffer->Item);
+            deviceContext->Stats.dma_contig_free_count++;
+            deviceContext->Stats.dma_contig_alloc_count--;
+        }
+    }
+
+    LINKED_LIST_CLEAR(WDFCOMMONBUFFER, deviceContext->DmaContiguousBuffers);
+
+    // Clear the pending request
+    if (deviceContext->PendingRequest) {
+        WdfRequestComplete(deviceContext->PendingRequest, STATUS_DEVICE_REMOVED);
+        deviceContext->PendingRequest = NULL;
+	}
+
 	TraceEvents(TRACE_LEVEL_INFORMATION, TRACE_DRIVER, "%!FUNC! Device hardware released");
 
     return STATUS_SUCCESS;

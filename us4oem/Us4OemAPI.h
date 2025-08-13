@@ -46,18 +46,35 @@ DEFINE_GUID (GUID_DEVINTERFACE_us4oem,
 #define US4OEM_WIN32_IOCTL_CLEAR_PENDING \
     CTL_CODE(FILE_DEVICE_UNKNOWN, US4OEM_WIN32_IOCTL_BASE + 5, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
+// Allocate a contiguous DMA buffer. Call with us4oem_dma_allocation_argument in the input buffer.
+// Returns us4oem_dma_contiguous_buffer_response in the output buffer.
+#define US4OEM_WIN32_IOCTL_ALLOCATE_DMA_CONTIGIOUS_BUFFER \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, US4OEM_WIN32_IOCTL_BASE + 6, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+// <== (US4OEM_WIN32_IOCTL_BASE + 7) reserved for Scatter-Gather DMA alloc ==>
+
+// Deallocate a contiguous DMA buffer. Call with unsigned long long PA in the input buffer.
+#define US4OEM_WIN32_IOCTL_DEALLOCATE_DMA_CONTIGIOUS_BUFFER \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, US4OEM_WIN32_IOCTL_BASE + 8, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+// <== (US4OEM_WIN32_IOCTL_BASE + 9) reserved for Scatter-Gather DMA dealloc ==>
+
+// Deallocate all DMA buffers allocated by the device.
+#define US4OEM_WIN32_IOCTL_DEALLOCATE_ALL_DMA_BUFFERS \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, US4OEM_WIN32_IOCTL_BASE + 10, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
 // ====== Memory Mapping Area Definitions ======
 
 typedef enum _us4oem_mmap_area {
     MMAP_AREA_BAR_0 = 0, // BAR 0 ("PCIDMA", 512 KiB = 0x0200)
     MMAP_AREA_BAR_4 = 1, // BAR 4 ("US4OEM", 64 MiB = 0x0400_0000)
-    MMAP_AREA_DMA = 2, // Any DMA allocation (specify ID)
+    MMAP_AREA_DMA = 2, // Any DMA allocation (specify VA)
     MMAP_AREA_MAX = MMAP_AREA_DMA
 } us4oem_mmap_area;
 
 typedef struct _us4oem_mmap_argument {
     us4oem_mmap_area area;
-    // TODO: ID for DMA regions
+	void* va; // Virtual address for DMA allocations
 
     unsigned long length_limit; // Maps the whole area if 0
 } us4oem_mmap_argument;
@@ -67,9 +84,25 @@ typedef struct _us4oem_mmap_response {
     unsigned long length_mapped;
 } us4oem_mmap_response;
 
+// ====== Statistics Structure ======
+
 typedef struct _us4oem_stats
 {
     unsigned long irq_count; // Total number of IRQs received
 	unsigned long irq_pending_count; // Number of IRQs pending to be handled
 
+	unsigned long dma_contig_alloc_count; // Number of contiguous DMA buffers currently allocated
+	unsigned long dma_contig_free_count; // Number of DMA buffers freed total
+
 } us4oem_stats;
+
+// ====== DMA Allocation Structure ======
+
+typedef struct _us4oem_dma_allocation_argument {
+    unsigned long length; // Length of the DMA buffer to allocate
+} us4oem_dma_allocation_argument;
+
+typedef struct _us4oem_dma_contiguous_buffer_response {
+	void* va; // Virtual address of the allocated buffer - note: this is NOT mapped to user-mode memory
+    unsigned long long pa; // Physical address of the allocated buffer
+} us4oem_dma_contiguous_buffer_response;

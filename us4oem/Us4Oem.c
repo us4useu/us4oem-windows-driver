@@ -61,10 +61,37 @@ us4oemCreateDevice(
             device,
             &GUID_DEVINTERFACE_us4oem,
             NULL // ReferenceString
-            );
+        );
 
         if (NT_SUCCESS(status)) {
             status = us4oemQueueInitialize(device);
+
+            if (NT_SUCCESS(status)) {
+                // Setup DMA
+                WdfDeviceSetAlignmentRequirement(
+                    device,
+                    0xFFF // 4096-byte alignment for DMA transfers
+                );
+
+                WDF_DMA_ENABLER_CONFIG dmaConfig;
+                WDF_DMA_ENABLER_CONFIG_INIT(
+                    &dmaConfig,
+                    WdfDmaProfilePacket64,
+                    1 // We don't really care about this anyway, but it must be set
+                );
+
+                if (!&dmaConfig) {
+                    TraceEvents(TRACE_LEVEL_ERROR, TRACE_DRIVER, "WDF_DMA_ENABLER_CONFIG_INIT failed");
+                    return STATUS_INSUFFICIENT_RESOURCES;
+				}
+
+                status = WdfDmaEnablerCreate(
+                    device,
+                    &dmaConfig,
+                    WDF_NO_OBJECT_ATTRIBUTES,
+                    &deviceContext->DmaEnabler
+                );
+            }
         }
     }
 

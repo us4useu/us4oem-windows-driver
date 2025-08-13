@@ -369,6 +369,64 @@ Us4OemMapBar(int deviceIndex, uint8_t bar, unsigned long size_limit) {
     return outBuffer.address;
 }
 
+PVOID
+Us4OemMapDmaBuf(int deviceIndex, void* va, unsigned long length) {
+    BOOL status = TRUE;
+    us4oem_mmap_response outBuffer;
+    us4oem_mmap_argument inBuffer;
+    DWORD bytesReceived = 0;
+
+    memset(&inBuffer, 0, sizeof(inBuffer));
+    memset(&outBuffer, 0, sizeof(outBuffer));
+
+    inBuffer.area = MMAP_AREA_DMA;
+	inBuffer.va = va; // Virtual address for DMA allocations
+    inBuffer.length_limit = length;
+
+    if (deviceHandleMap.count(deviceIndex) == 0 || deviceHandleMap[deviceIndex] == INVALID_HANDLE_VALUE) {
+        status = GetDeviceHandle(deviceIndex);
+        if (status == FALSE) {
+            return NULL;
+        }
+    }
+
+    if (deviceHandleMap[deviceIndex] == 0) {
+        printf("Invalid device handle.\n");
+        return NULL;
+    }
+
+    status = DeviceIoControl(deviceHandleMap[deviceIndex],
+        US4OEM_WIN32_IOCTL_MMAP,
+        &inBuffer,
+        sizeof(inBuffer),
+        &outBuffer,
+        sizeof(outBuffer),
+        &bytesReceived,
+        NULL);
+    if (status == FALSE) {
+        printf("DeviceIoControl failed 0x%x\n", GetLastError());
+        CloseHandle(deviceHandleMap[deviceIndex]);
+        deviceHandleMap[deviceIndex] = INVALID_HANDLE_VALUE;
+        return NULL;
+    }
+
+    std::cout << "Address received: 0x" << std::hex << outBuffer.address << std::dec << std::endl;
+    std::cout << "Length mapped: 0x" << std::hex << outBuffer.length_mapped << std::dec << std::endl;
+
+    // Read offset 0
+    std::cout << "@ offset 0: 0x" << std::hex << *(int*)(outBuffer.address) << std::dec << std::endl;
+	*(int*)outBuffer.address = 0x12345678; // Example write to the mapped area
+	std::cout << "Wrote 0x12345678 to the mapped area." << std::endl;
+	std::cout << "@ offset 0 after write: 0x" << std::hex << *(int*)(outBuffer.address) << std::dec << std::endl;
+
+    if (deviceHandleMap.count(deviceIndex) != 0 || deviceHandleMap[deviceIndex] != INVALID_HANDLE_VALUE && deviceHandleMap[deviceIndex] != 0) {
+        CloseHandle(deviceHandleMap[deviceIndex]);
+        deviceHandleMap[deviceIndex] = INVALID_HANDLE_VALUE;
+    }
+
+    return outBuffer.address;
+}
+
 BOOL
 Us4OemReadStats(int index)
 {
@@ -408,6 +466,8 @@ Us4OemReadStats(int index)
     std::cout << "Stats: " << std::endl;
 	std::cout << "  IRQ count: " << outBuffer.irq_count << std::endl;
 	std::cout << "  IRQ pending count: " << outBuffer.irq_pending_count << std::endl;
+	std::cout << "  DMA contiguous alloc count: " << outBuffer.dma_contig_alloc_count << std::endl;
+    std::cout << "  DMA contiguous free count: " << outBuffer.dma_contig_free_count << std::endl;
     std::cout << std::endl;
 
     if (deviceHandleMap.count(index) != 0 || deviceHandleMap[index] != INVALID_HANDLE_VALUE && deviceHandleMap[index] != 0) {
@@ -416,6 +476,101 @@ Us4OemReadStats(int index)
     }
 
     return status;
+}
+
+std::pair<PVOID, unsigned long long>
+Us4OemAllocDmaContig(int deviceIndex, unsigned long length) {
+    BOOL status = TRUE;
+    us4oem_dma_contiguous_buffer_response outBuffer;
+    us4oem_dma_allocation_argument inBuffer;
+    DWORD bytesReceived = 0;
+
+    memset(&inBuffer, 0, sizeof(inBuffer));
+    memset(&outBuffer, 0, sizeof(outBuffer));
+
+	inBuffer.length = length; // Length of the DMA buffer to allocate
+
+    if (deviceHandleMap.count(deviceIndex) == 0 || deviceHandleMap[deviceIndex] == INVALID_HANDLE_VALUE) {
+        status = GetDeviceHandle(deviceIndex);
+        if (status == FALSE) {
+            return { NULL, NULL };
+        }
+    }
+
+    if (deviceHandleMap[deviceIndex] == 0) {
+        printf("Invalid device handle.\n");
+        return { NULL, NULL };
+    }
+
+    status = DeviceIoControl(deviceHandleMap[deviceIndex],
+        US4OEM_WIN32_IOCTL_ALLOCATE_DMA_CONTIGIOUS_BUFFER,
+        &inBuffer,
+        sizeof(inBuffer),
+        &outBuffer,
+        sizeof(outBuffer),
+        &bytesReceived,
+        NULL);
+    if (status == FALSE) {
+        printf("DeviceIoControl failed 0x%x\n", GetLastError());
+        CloseHandle(deviceHandleMap[deviceIndex]);
+        deviceHandleMap[deviceIndex] = INVALID_HANDLE_VALUE;
+        return { NULL, NULL };
+    }
+
+	std::cout << "VA: 0x" << std::hex << outBuffer.va << std::dec << std::endl;
+	std::cout << "PA: 0x" << std::hex << outBuffer.pa << std::dec << std::endl;
+
+    if (deviceHandleMap.count(deviceIndex) != 0 || deviceHandleMap[deviceIndex] != INVALID_HANDLE_VALUE && deviceHandleMap[deviceIndex] != 0) {
+        CloseHandle(deviceHandleMap[deviceIndex]);
+        deviceHandleMap[deviceIndex] = INVALID_HANDLE_VALUE;
+    }
+
+	return { (PVOID)outBuffer.va, outBuffer.pa };
+}
+
+BOOL
+Us4OemDeallocDmaContig(int deviceIndex, unsigned long long pa) {
+    BOOL status = TRUE;
+    unsigned long long inBuffer;
+    DWORD bytesReceived = 0;
+
+	memset(&inBuffer, 0, sizeof(inBuffer));
+
+	inBuffer = pa; // Physical address of the allocated buffer
+
+    if (deviceHandleMap.count(deviceIndex) == 0 || deviceHandleMap[deviceIndex] == INVALID_HANDLE_VALUE) {
+        status = GetDeviceHandle(deviceIndex);
+        if (status == FALSE) {
+            return FALSE;
+        }
+    }
+
+    if (deviceHandleMap[deviceIndex] == 0) {
+        printf("Invalid device handle.\n");
+        return FALSE;
+    }
+
+    status = DeviceIoControl(deviceHandleMap[deviceIndex],
+        US4OEM_WIN32_IOCTL_DEALLOCATE_DMA_CONTIGIOUS_BUFFER,
+        &inBuffer,
+        sizeof(inBuffer),
+        NULL,
+        0,
+        &bytesReceived,
+        NULL);
+    if (status == FALSE) {
+        printf("DeviceIoControl failed 0x%x\n", GetLastError());
+        CloseHandle(deviceHandleMap[deviceIndex]);
+        deviceHandleMap[deviceIndex] = INVALID_HANDLE_VALUE;
+        return FALSE;
+    }
+
+    if (deviceHandleMap.count(deviceIndex) != 0 || deviceHandleMap[deviceIndex] != INVALID_HANDLE_VALUE && deviceHandleMap[deviceIndex] != 0) {
+        CloseHandle(deviceHandleMap[deviceIndex]);
+        deviceHandleMap[deviceIndex] = INVALID_HANDLE_VALUE;
+    }
+
+    return TRUE;
 }
 
 BOOL
@@ -522,6 +677,47 @@ Us4OemPollClearPending(int index)
     printf("Clearing pending IRQs on device %d...\n", index);
     status = DeviceIoControl(deviceHandleMap[index],
         US4OEM_WIN32_IOCTL_CLEAR_PENDING,
+        NULL,
+        0,
+        NULL,
+        0,
+        NULL,
+        NULL);
+    if (status == FALSE) {
+        printf("DeviceIoControl failed 0x%x\n", GetLastError());
+        CloseHandle(deviceHandleMap[index]);
+        deviceHandleMap[index] = INVALID_HANDLE_VALUE;
+        return status;
+    }
+
+    if (deviceHandleMap.count(index) != 0 || deviceHandleMap[index] != INVALID_HANDLE_VALUE && deviceHandleMap[index] != 0) {
+        CloseHandle(deviceHandleMap[index]);
+        deviceHandleMap[index] = INVALID_HANDLE_VALUE;
+    }
+
+    return status;
+}
+
+BOOL
+Us4OemDeallocAll(int index)
+{
+    BOOL status = TRUE;
+
+    if (deviceHandleMap.count(index) == 0 || deviceHandleMap[index] == INVALID_HANDLE_VALUE) {
+        status = GetDeviceHandle(index);
+        if (status == FALSE) {
+            return status;
+        }
+    }
+
+    if (deviceHandleMap[index] == 0) {
+        printf("Invalid device handle.\n");
+        return FALSE;
+    }
+
+    printf("Deallocating all DMA buffers on device %d...\n", index);
+    status = DeviceIoControl(deviceHandleMap[index],
+        US4OEM_WIN32_IOCTL_DEALLOCATE_ALL_DMA_BUFFERS,
         NULL,
         0,
         NULL,
@@ -711,11 +907,147 @@ int main() {
     Us4OemPollClearPending(0);
 	Us4OemReadStats(0);
 
+	std::cout << std::endl << "====== DMA Contig Alloc Test ======" << std::endl;
+    std::cout << "Allocating DMA contiguous buffer length=0x1000 for device 0..." << std::endl;
+    std::pair<PVOID, unsigned long long> dmaBuffer = Us4OemAllocDmaContig(0, 0x1000);
+    if (dmaBuffer.first) {
+        std::cout << "DMA contiguous buffer allocated at VA: 0x" << std::hex << dmaBuffer.first << std::dec << std::endl;
+        // Map the allocated DMA buffer
+        std::cout << "Mapping DMA buffer for device 0..." << std::endl;
+        void* m = Us4OemMapDmaBuf(0, dmaBuffer.first, 0x1000);
+        Us4OemReadStats(0);
+
+		ZeroMemory(m, 0x1000); // Zero out the allocated buffer
+        std::cout << "Zeroed out the allocated buffer." << std::endl;
+        // Read back to verify
+        std::cout << "Reading back from the mapped DMA buffer..." << std::endl;
+        for (int i = 0; i < 4; i++) {
+            std::cout << "Offset " << i * 4 << ": 0x" << std::hex << *(int*)((char*)m + i * 4) << std::dec << std::endl;
+		}
+
+        // Allocate second
+		std::cout << "Allocating another DMA contiguous buffer length=0x1004 for device 0..." << std::endl;
+        std::pair<PVOID, unsigned long long> dmaBuffer2 = Us4OemAllocDmaContig(0, 0x1004);
+
+		// Deallocate the DMA contiguous buffer
+        std::cout << "Deallocating DMA contiguous buffer for device 0..." << std::endl;
+        if (Us4OemDeallocDmaContig(0, dmaBuffer.second)) {
+            std::cout << "[1] DMA contiguous buffer deallocated successfully." << std::endl;
+        } else {
+            std::cout << "[1] Failed to deallocate DMA contiguous buffer." << std::endl;
+		}
+
+        Us4OemReadStats(0);
+
+        // Deallocate the DMA contiguous buffer
+        std::cout << "Deallocating DMA contiguous buffer 2 for device 0..." << std::endl;
+        if (Us4OemDeallocDmaContig(0, dmaBuffer2.second)) {
+            std::cout << "[2] DMA contiguous buffer deallocated successfully." << std::endl;
+        }
+        else {
+            std::cout << "[2] Failed to deallocate DMA contiguous buffer." << std::endl;
+        }
+
+        Us4OemReadStats(0);
+
+		// Try deallocating again to see if it fails gracefully
+        std::cout << "Trying to deallocate the same DMA contiguous buffer again (should fail)..." << std::endl;
+        if (Us4OemDeallocDmaContig(0, dmaBuffer.second)) {
+            std::cout << "[1] Deallocated DMA contiguous buffer again, which should not happen." << std::endl;
+        }
+        else {
+            std::cout << "[1] Failed to deallocate DMA contiguous buffer again, as expected." << std::endl;
+        }
+    } else {
+        std::cout << "Failed to allocate DMA contiguous buffer." << std::endl;
+	}
+
+	// Big buffer test
+	std::cout << std::endl << "====== Big DMA Contig Alloc Test ======" << std::endl;
+	// 10 MiB buffer allocation test
+	// The spec only asks for 1 MiB, but we can try larger sizes
+	unsigned long size = 10 * 1024 * 1024; // 10 MiB
+	std::cout << "Allocating large DMA contiguous buffer length=0x" << std::hex << size << std::dec << " for device 0..." << std::endl;
+	std::pair<PVOID, unsigned long long> bigDmaBuffer = Us4OemAllocDmaContig(0, size);
+    if (bigDmaBuffer.first) {
+        std::cout << "Large DMA contiguous buffer allocated at VA: 0x" << std::hex << bigDmaBuffer.first << std::dec << std::endl;
+        
+        Us4OemReadStats(0);
+
+		// Map the allocated large DMA buffer
+		void* m = Us4OemMapDmaBuf(0, bigDmaBuffer.first, size);
+
+		// Try writing to all of the buffer
+        for (unsigned long long i = 0; i < size / sizeof(int); i++) {
+            ((int*)m)[i] = (int)i; // Fill with sequential values
+
+			// Read back to verify
+            if (i % 0x10000 == 0) { // Print every 0x10000th value to avoid flooding the output
+                std::cout << "Offset " << std::hex << i * sizeof(int) << ": 0x" << ((int*)m)[i] << std::dec << std::endl;
+			}
+		}
+
+		// Deallocate the large DMA contiguous buffer
+        std::cout << "Deallocating large DMA contiguous buffer for device 0..." << std::endl;
+        if (Us4OemDeallocDmaContig(0, bigDmaBuffer.second)) {
+            std::cout << "Large DMA contiguous buffer deallocated successfully." << std::endl;
+        }
+        else {
+            std::cout << "Failed to deallocate large DMA contiguous buffer." << std::endl;
+        }
+    } else {
+		std::cout << "Failed to allocate large DMA contiguous buffer." << std::endl;
+	}
+
+	// Many allocations test
+	std::cout << std::endl << "====== Many DMA Contig Alloc Test ======" << std::endl;
+	std::cout << "Allocating many small DMA contiguous buffers for device 0..." << std::endl;
+	int numAllocations = 100;
+	std::vector<std::pair<PVOID, unsigned long long>> allocations;
+    for (int i = 0; i < numAllocations; i++) {
+        std::pair<PVOID, unsigned long long> currentBuf = Us4OemAllocDmaContig(0, 0xA0);
+
+        if (!currentBuf.first) {
+            std::cout << "Failed to allocate DMA contiguous buffer " << i << "." << std::endl;
+            break; // Stop if allocation fails
+        }
+        else {
+            allocations.push_back(currentBuf);
+        }
+    }
+	// Cleanup allocated buffers
+    for (const auto& alloc : allocations) {
+        if (!Us4OemDeallocDmaContig(0, alloc.second)) {
+            std::cout << "Failed to deallocate DMA contiguous buffer." << std::endl;
+        }
+	}
+
+	std::cout << "All allocated DMA contiguous buffers deallocated." << std::endl;
+
+	// Alloc a few buffers to test deallocation
+	std::cout << std::endl << "====== Deallocate All Test ======" << std::endl;
+	std::cout << "Allocating a few DMA contiguous buffers for device 0..." << std::endl;
+	std::vector<std::pair<PVOID, unsigned long long>> testAllocations;
+
+    for (int i = 0; i < 5; i++) {
+        std::pair<PVOID, unsigned long long> currentBuf = Us4OemAllocDmaContig(0, 0x100);
+        if (!currentBuf.first) {
+            std::cout << "Failed to allocate DMA contiguous buffer " << i << "." << std::endl;
+            break; // Stop if allocation fails
+        }
+        else {
+            testAllocations.push_back(currentBuf);
+        }
+	}
+	Us4OemReadStats(0);
+    Us4OemDeallocAll(0);
+    Us4OemReadStats(0);
+
     // Clean up
     if (dev0bar4) {
         VirtualFree(dev0bar4, 0, MEM_RELEASE);
         dev0bar4 = NULL;
-    }
+	}
     for (auto& pair : deviceInterfaceDetailMap) {
         free(pair.second);
     }

@@ -27,6 +27,9 @@ IOCTL_HANDLER_FUNC us4oemIoctlReadStats;
 IOCTL_HANDLER_FUNC us4oemIoctlPoll;
 IOCTL_HANDLER_FUNC us4oemIoctlPollNonBlocking;
 IOCTL_HANDLER_FUNC us4oemIoctlClearPending;
+IOCTL_HANDLER_FUNC us4oemIoctlAllocateDmaContiguousBuffer;
+IOCTL_HANDLER_FUNC us4oemIoctlDeallocateContigousDmaBuffer;
+IOCTL_HANDLER_FUNC us4oemIoctlDeallocateAllDmaBuffers;
 
 PIOCTL_HANDLER us4oemGetIoctlHandler();
 ULONG us4oemGetIoctlHandlerCount();

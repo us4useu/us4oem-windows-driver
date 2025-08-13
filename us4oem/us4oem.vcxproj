@@ -30,6 +30,7 @@
     <ClInclude Include="Char.h" />
     <ClInclude Include="Interrupt.h" />
     <ClInclude Include="Ioctl.h" />
+    <ClInclude Include="LinkedList.h" />
     <ClInclude Include="Us4Oem.h" />
     <ClInclude Include="Driver.h" />
     <ClInclude Include="Us4OemAPI.h" />

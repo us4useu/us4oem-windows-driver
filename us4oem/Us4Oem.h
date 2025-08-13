@@ -2,6 +2,8 @@
 
 #include "us4oemapi.h"
 
+#include "linkedlist.h"
+
 EXTERN_C_START
 
 // Used for identification of BAR regions
@@ -16,7 +18,7 @@ typedef struct _BAR_INFO
 	PVOID MappedAddress; // This is the virtual address after mapping the BAR
 } BAR_INFO, *PBAR_INFO;
 
-
+USE_IN_LINKED_LISTS(WDFCOMMONBUFFER);
 
 typedef struct _US4OEM_CONTEXT
 {
@@ -28,6 +30,10 @@ typedef struct _US4OEM_CONTEXT
     us4oem_stats Stats; // Statistics for the device
 
 	WDFREQUEST PendingRequest; // Request that is waiting for an IRQ
+
+	WDFDMAENABLER DmaEnabler; // DMA enabler for the device
+
+	LINKED_LIST_POINTERS(WDFCOMMONBUFFER, DmaContiguousBuffers) // Linked list of contiguous DMA buffers
 
 } US4OEM_CONTEXT, *PUS4OEM_CONTEXT;
 
