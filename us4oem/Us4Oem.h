@@ -10,6 +10,11 @@ EXTERN_C_START
 #define PCIDMA_REGION_LENGTH 0x200
 #define US4OEM_REGION_LENGTH 0x4000000
 
+// Driver version
+#ifndef US4OEM_DRIVER_INFO_STRING
+#define US4OEM_DRIVER_INFO_STRING "us4oem win32 driver"
+#endif
+
 typedef struct _BAR_INFO
 {
     PHYSICAL_ADDRESS BaseAddr;

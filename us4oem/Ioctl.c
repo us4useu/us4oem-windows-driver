@@ -6,13 +6,11 @@
 #pragma alloc_text (PAGE, us4oemIoctlReadStats)
 #endif
 
-#define DRIVER_INFO_STRING "us4oem win32 driver"
-
 IOCTL_HANDLER handlers[] = {
     {
         US4OEM_WIN32_IOCTL_GET_DRIVER_INFO,
         0, // No input buffer needed
-        sizeof(DRIVER_INFO_STRING), // Output buffer size
+        sizeof(us4oem_driver_info), // Output buffer size
         us4oemIoctlGetDriverInfo
     },
     {
@@ -81,16 +79,13 @@ VOID us4oemIoctlGetDriverInfo(
 
 	PAGED_CODE();
 
-    char driverInfo[] = DRIVER_INFO_STRING; // TODO: Include some meaningful driver info, version?
+	us4oem_driver_info* driverInfo = (us4oem_driver_info*)OutputBuffer;
 
-    RtlCopyMemory(OutputBuffer, driverInfo, sizeof(driverInfo));
+	driverInfo->version = US4OEM_DRIVER_VERSION;
 
-    TraceEvents(TRACE_LEVEL_INFORMATION,
-        TRACE_IOCTL,
-        "Driver info sent: %s",
-        driverInfo);
+	RtlCopyBytes(driverInfo->name, US4OEM_DRIVER_INFO_STRING, sizeof(US4OEM_DRIVER_INFO_STRING));
 
-    WdfRequestCompleteWithInformation(Request, STATUS_SUCCESS, sizeof(driverInfo));
+    WdfRequestCompleteWithInformation(Request, STATUS_SUCCESS, sizeof(us4oem_driver_info));
 }
 
 VOID us4oemIoctlReadStats(

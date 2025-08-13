@@ -255,10 +255,10 @@ BOOL
 Us4OemGetDriverInfo(int index)
 {
     BOOL status = TRUE;
-    char outBuffer[32];
+    us4oem_driver_info outBuffer;
     DWORD bytesReceived = 0;
 
-	memset(outBuffer, 0, 32);
+	memset(&outBuffer, 0, sizeof(outBuffer));
 
     if (deviceHandleMap.count(index) == 0 || deviceHandleMap[index] == INVALID_HANDLE_VALUE) {
         status = GetDeviceHandle(index);
@@ -277,7 +277,7 @@ Us4OemGetDriverInfo(int index)
         NULL,
         0,
 		&outBuffer,
-        32,
+        sizeof(outBuffer),
         &bytesReceived,
         NULL);
     if (status == FALSE) {
@@ -287,24 +287,28 @@ Us4OemGetDriverInfo(int index)
         return status;
     }
 
-    std::cout << "Bytes received: " << bytesReceived << std::endl;
-	std::cout << "Data received:" << std::endl;
-    std::cout << "hex: ";
-	
-    for (DWORD i = 0; i < bytesReceived; i++) {
-        std::cout << std::hex << std::setw(2) << std::setfill('0') << (unsigned int)(outBuffer)[i] << std::dec << " ";
-	}
-	std::cout << std::endl;
+	// Print name from the c-style string
+	std::cout << "Driver Name: " << std::string(outBuffer.name) << std::endl;
 
-	std::cout << "ascii: ";
-    for (DWORD i = 0; i < bytesReceived - 1; i++) {
-        if (isprint(outBuffer[i])) {
-            std::cout << outBuffer[i];
-        } else {
-            std::cout << '#';
-        }
-	}
-	std::cout << std::endl;
+	// Print version
+	std::cout << "Driver Version: " << std::endl;
+	std::cout << "  Reply:" << std::endl;
+	std::cout << "      Magic: 0x" << std::hex << ((outBuffer.version & 0xFF000000) >> 24) << std::dec << std::endl;
+	std::cout << "      Major: 0x" << std::hex << ((outBuffer.version & 0x00FF0000) >> 16) << std::dec << std::endl;
+	std::cout << "      Minor: 0x" << std::hex << ((outBuffer.version & 0x0000FF00) >> 8) << std::dec << std::endl;
+	std::cout << "      Patch: 0x" << std::hex << (outBuffer.version & 0x000000FF) << std::dec << std::endl;
+    std::cout << "  Built against: " << std::endl;
+	std::cout << "      Magic: 0x" << std::hex << ((US4OEM_DRIVER_VERSION & 0xFF000000) >> 24) << std::dec << std::endl;
+	std::cout << "      Major: 0x" << std::hex << ((US4OEM_DRIVER_VERSION & 0x00FF0000) >> 16) << std::dec << std::endl;
+	std::cout << "      Minor: 0x" << std::hex << ((US4OEM_DRIVER_VERSION & 0x0000FF00) >> 8) << std::dec << std::endl;
+	std::cout << "      Patch: 0x" << std::hex << (US4OEM_DRIVER_VERSION & 0x000000FF) << std::dec << std::endl;
+
+    if (US4OEM_DRIVER_VERSION == outBuffer.version) {
+        std::cout << "(match)" << std::endl;
+    }
+    else {
+        std::cout << "(!!!MISMATCH!!!)" << std::endl;
+    }
 
     if (deviceHandleMap.count(index) != 0 || deviceHandleMap[index] != INVALID_HANDLE_VALUE && deviceHandleMap[index] != 0) {
         CloseHandle(deviceHandleMap[index]);

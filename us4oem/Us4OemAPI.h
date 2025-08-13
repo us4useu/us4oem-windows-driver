@@ -10,15 +10,28 @@
 #include <initguid.h> 
 #endif
 
-//
+// Driver version
+typedef unsigned long us4oem_driver_version_t;
+
+#define US4OEM_DRIVER_VERSION_MAGIC 0xAF // Magic number to identify the version format
+
+#define ASSEMBLE_US4OEM_DRIVER_VERSION(major, minor, patch) \
+   (unsigned)((US4OEM_DRIVER_VERSION_MAGIC << 24) | \
+   ((major & 0xFF) << 16) | \
+   ((minor & 0xFF) << 8) | \
+   (patch & 0xFF))
+
+// Can be used to check if the driver version is compatible with the application.
+// Also used in the IOCTL handler itself.
+#define US4OEM_DRIVER_VERSION ASSEMBLE_US4OEM_DRIVER_VERSION(0, 1, 0)
+
 // Define an Interface Guid so that apps can find the device and talk to it.
-//
 DEFINE_GUID (GUID_DEVINTERFACE_us4oem,
     0x5d6d47d5,0x5cfa,0x48d0,0x9e,0x12,0xa5,0x10,0xed,0xe8,0x66,0xbd);
 
 #define US4OEM_WIN32_IOCTL_BASE 0xA00 // Arbitrary base value for IOCTLs
 
-// Read the driver information. Returns a null-terminated string.
+// Read the driver information. Returns us4oem_driver_info in the output buffer.
 #define US4OEM_WIN32_IOCTL_GET_DRIVER_INFO \
     CTL_CODE(FILE_DEVICE_UNKNOWN, US4OEM_WIN32_IOCTL_BASE + 0, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
@@ -62,6 +75,12 @@ DEFINE_GUID (GUID_DEVINTERFACE_us4oem,
 // Deallocate all DMA buffers allocated by the device.
 #define US4OEM_WIN32_IOCTL_DEALLOCATE_ALL_DMA_BUFFERS \
     CTL_CODE(FILE_DEVICE_UNKNOWN, US4OEM_WIN32_IOCTL_BASE + 10, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+// ====== Driver Information Structure ======
+typedef struct _us4oem_driver_info {
+    us4oem_driver_version_t version; // Driver version
+    char name[32]; // Driver name, e.g. "us4oem win32 driver"
+} us4oem_driver_info;
 
 // ====== Memory Mapping Area Definitions ======
 
