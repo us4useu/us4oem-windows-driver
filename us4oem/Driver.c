@@ -196,11 +196,20 @@ us4oemEvtDeviceReleaseHardware(
         if (commonBuffer->Item != NULL) {
             WdfObjectDelete(*commonBuffer->Item);
             deviceContext->Stats.dma_contig_free_count++;
-            deviceContext->Stats.dma_contig_alloc_count--;
         }
     }
+    LINKED_LIST_FOR_EACH(WDFCOMMONBUFFER, deviceContext->DmaScatterGatherBuffers, commonBuffer) {
+        if (commonBuffer->Item != NULL) {
+            WdfObjectDelete(*commonBuffer->Item);
+            deviceContext->Stats.dma_sg_free_count++;
+        }
+	}
+
+    deviceContext->Stats.dma_sg_alloc_count = 0;
+    deviceContext->Stats.dma_contig_alloc_count = 0;
 
     LINKED_LIST_CLEAR(WDFCOMMONBUFFER, deviceContext->DmaContiguousBuffers);
+	LINKED_LIST_CLEAR(WDFCOMMONBUFFER, deviceContext->DmaScatterGatherBuffers);
 
     // Clear the pending request
     if (deviceContext->PendingRequest) {

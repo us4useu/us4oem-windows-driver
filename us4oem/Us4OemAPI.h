@@ -23,7 +23,7 @@ typedef unsigned long us4oem_driver_version_t;
 
 // Can be used to check if the driver version is compatible with the application.
 // Also used in the IOCTL handler itself.
-#define US4OEM_DRIVER_VERSION ASSEMBLE_US4OEM_DRIVER_VERSION(0, 2, 0)
+#define US4OEM_DRIVER_VERSION ASSEMBLE_US4OEM_DRIVER_VERSION(0, 3, 0)
 
 // Define an Interface Guid so that apps can find the device and talk to it.
 DEFINE_GUID (GUID_DEVINTERFACE_us4oem,
@@ -64,13 +64,18 @@ DEFINE_GUID (GUID_DEVINTERFACE_us4oem,
 #define US4OEM_WIN32_IOCTL_ALLOCATE_DMA_CONTIGIOUS_BUFFER \
     CTL_CODE(FILE_DEVICE_UNKNOWN, US4OEM_WIN32_IOCTL_BASE + 6, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
-// <== (US4OEM_WIN32_IOCTL_BASE + 7) reserved for Scatter-Gather DMA alloc ==>
+// Allocate a scatter-gather DMA buffer. Call with us4oem_dma_allocation_argument in the input buffer.
+// Returns us4oem_dma_scatter_gather_buffer_response in the output buffer.
+#define US4OEM_WIN32_IOCTL_ALLOCATE_DMA_SG_BUFFER \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, US4OEM_WIN32_IOCTL_BASE + 7, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
 // Deallocate a contiguous DMA buffer. Call with unsigned long long PA in the input buffer.
 #define US4OEM_WIN32_IOCTL_DEALLOCATE_DMA_CONTIGIOUS_BUFFER \
     CTL_CODE(FILE_DEVICE_UNKNOWN, US4OEM_WIN32_IOCTL_BASE + 8, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
-// <== (US4OEM_WIN32_IOCTL_BASE + 9) reserved for Scatter-Gather DMA dealloc ==>
+// Deallocate a scatter-gather DMA buffer. Call with void* VA in the input buffer.
+#define US4OEM_WIN32_IOCTL_DEALLOCATE_DMA_SG_BUFFER \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, US4OEM_WIN32_IOCTL_BASE + 9, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
 // Deallocate all DMA buffers allocated by the device.
 #define US4OEM_WIN32_IOCTL_DEALLOCATE_ALL_DMA_BUFFERS \
@@ -113,6 +118,9 @@ typedef struct _us4oem_stats
 	unsigned long dma_contig_alloc_count; // Number of contiguous DMA buffers currently allocated
 	unsigned long dma_contig_free_count; // Number of DMA buffers freed total
 
+	unsigned long dma_sg_alloc_count; // Number of scatter-gather DMA buffers currently allocated
+	unsigned long dma_sg_free_count; // Number of scatter-gather DMA buffers freed total
+
 	unsigned long file_open_count; // Number of times the device char device has been opened to be used by a client
 
 } us4oem_stats;
@@ -141,8 +149,14 @@ typedef struct _us4oem_dma_scatter_gather_buffer_response {
 	size_t length_used; // Total size of this structure - see US4OEM_DMA_SG_RESPONSE_NEEDED_SIZE(chunk_count)
     
     //us4oem_dma_scatter_gather_buffer_chunk chunks[<DYNAMIC>]; // Array of chunks, size is variable based on chunk_count
+	us4oem_dma_scatter_gather_buffer_chunk chunks[1]; // This used as a placeholder
 
 } us4oem_dma_scatter_gather_buffer_response;
 
 #define US4OEM_DMA_SG_RESPONSE_NEEDED_SIZE(chunk_count) \
-    (sizeof(us4oem_dma_scatter_gather_buffer_response) + (chunk_count) * sizeof(us4oem_dma_scatter_gather_buffer_chunk))
+    (sizeof(us4oem_dma_scatter_gather_buffer_response) + (chunk_count - 1) * sizeof(us4oem_dma_scatter_gather_buffer_chunk))
+
+#define US4OEM_DMA_SG_CHUNK_COUNT(length, chunk_size) \
+    (length % chunk_size == 0 ? \
+    (length / chunk_size) : \
+    (length / chunk_size + 1))

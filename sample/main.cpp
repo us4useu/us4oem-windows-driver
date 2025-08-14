@@ -472,6 +472,8 @@ Us4OemReadStats(int index)
 	std::cout << "  IRQ pending count: " << outBuffer.irq_pending_count << std::endl;
 	std::cout << "  DMA contiguous alloc count: " << outBuffer.dma_contig_alloc_count << std::endl;
     std::cout << "  DMA contiguous free count: " << outBuffer.dma_contig_free_count << std::endl;
+	std::cout << "  DMA SG alloc count: " << outBuffer.dma_sg_alloc_count << std::endl;
+	std::cout << "  DMA SG free count: " << outBuffer.dma_sg_free_count << std::endl;
 	std::cout << "  File open count: " << outBuffer.file_open_count << std::endl;
     std::cout << std::endl;
 
@@ -535,6 +537,80 @@ Us4OemAllocDmaContig(int deviceIndex, unsigned long length, bool quiet = false) 
 	return { (PVOID)outBuffer.va, outBuffer.pa };
 }
 
+void Us4OemAllocDmaSG(int deviceIndex, unsigned long length, unsigned long chunk_size) {
+    BOOL status = TRUE;
+    us4oem_dma_allocation_argument inBuffer;
+    DWORD bytesReceived = 0;
+
+    memset(&inBuffer, 0, sizeof(inBuffer));
+
+    inBuffer.length = length; // Length of the DMA buffer to allocate
+	inBuffer.chunk_size = chunk_size; // Size of each chunk to allocate
+
+	int chunk_count = US4OEM_DMA_SG_CHUNK_COUNT(length, chunk_size);
+	std::cout << "Allocating " << chunk_count << " chunks of size " << chunk_size << " bytes each." << std::endl;
+
+    DWORD response_struct_size = US4OEM_DMA_SG_RESPONSE_NEEDED_SIZE(chunk_count);
+
+	// Allocate response buffer using win32 API
+    us4oem_dma_scatter_gather_buffer_response* outBuffer = (us4oem_dma_scatter_gather_buffer_response*)malloc(response_struct_size);
+    if (outBuffer == NULL) {
+        printf("Failed to allocate memory for response buffer.\n");
+        return;
+	}
+
+    if (deviceHandleMap.count(deviceIndex) == 0 || deviceHandleMap[deviceIndex] == INVALID_HANDLE_VALUE) {
+        status = GetDeviceHandle(deviceIndex);
+        if (status == FALSE) {
+            return;
+        }
+    }
+
+    if (deviceHandleMap[deviceIndex] == 0) {
+        printf("Invalid device handle.\n");
+        return;
+    }
+
+    status = DeviceIoControl(deviceHandleMap[deviceIndex],
+        US4OEM_WIN32_IOCTL_ALLOCATE_DMA_SG_BUFFER,
+        &inBuffer,
+        sizeof(inBuffer),
+        outBuffer,
+        response_struct_size,
+        &bytesReceived,
+        NULL);
+    if (status == FALSE) {
+        printf("DeviceIoControl failed 0x%x\n", GetLastError());
+        CloseHandle(deviceHandleMap[deviceIndex]);
+        deviceHandleMap[deviceIndex] = INVALID_HANDLE_VALUE;
+        return;
+    }
+
+	unsigned long total_size = 0;
+
+	std::cout << "Response size: " << bytesReceived << std::endl;
+	std::cout << "Chunk count: " << outBuffer->chunk_count << std::endl;
+	std::cout << "Length used: " << outBuffer->length_used << std::endl;
+	std::cout << "Chunks: " << std::endl;
+
+	for (unsigned int i = 0; i < outBuffer->chunk_count; i++) {
+        total_size += outBuffer->chunks[i].length;
+        if (outBuffer->chunk_count > 100 && i % 40 != 0) {
+            continue;
+		}
+        std::cout << "  Chunk " << i << ": VA: 0x" << std::hex << outBuffer->chunks[i].va << ", PA: 0x" << outBuffer->chunks[i].pa << ", length: 0x" << outBuffer->chunks[i].length << std::dec << std::endl;
+	}
+
+	std::cout << "Total size allocated: " << total_size << "; expected: " << length << std::endl;
+
+    if (deviceHandleMap.count(deviceIndex) != 0 || deviceHandleMap[deviceIndex] != INVALID_HANDLE_VALUE && deviceHandleMap[deviceIndex] != 0) {
+        CloseHandle(deviceHandleMap[deviceIndex]);
+        deviceHandleMap[deviceIndex] = INVALID_HANDLE_VALUE;
+    }
+
+    return;
+}
+
 BOOL
 Us4OemDeallocDmaContig(int deviceIndex, unsigned long long pa) {
     BOOL status = TRUE;
@@ -559,6 +635,51 @@ Us4OemDeallocDmaContig(int deviceIndex, unsigned long long pa) {
 
     status = DeviceIoControl(deviceHandleMap[deviceIndex],
         US4OEM_WIN32_IOCTL_DEALLOCATE_DMA_CONTIGIOUS_BUFFER,
+        &inBuffer,
+        sizeof(inBuffer),
+        NULL,
+        0,
+        &bytesReceived,
+        NULL);
+    if (status == FALSE) {
+        printf("DeviceIoControl failed 0x%x\n", GetLastError());
+        CloseHandle(deviceHandleMap[deviceIndex]);
+        deviceHandleMap[deviceIndex] = INVALID_HANDLE_VALUE;
+        return FALSE;
+    }
+
+    if (deviceHandleMap.count(deviceIndex) != 0 || deviceHandleMap[deviceIndex] != INVALID_HANDLE_VALUE && deviceHandleMap[deviceIndex] != 0) {
+        CloseHandle(deviceHandleMap[deviceIndex]);
+        deviceHandleMap[deviceIndex] = INVALID_HANDLE_VALUE;
+    }
+
+    return TRUE;
+}
+
+BOOL
+Us4OemDeallocDmaSG(int deviceIndex, void* va) {
+    BOOL status = TRUE;
+    void* inBuffer;
+    DWORD bytesReceived = 0;
+
+    memset(&inBuffer, 0, sizeof(inBuffer));
+
+    inBuffer = va; // Physical address of the allocated buffer
+
+    if (deviceHandleMap.count(deviceIndex) == 0 || deviceHandleMap[deviceIndex] == INVALID_HANDLE_VALUE) {
+        status = GetDeviceHandle(deviceIndex);
+        if (status == FALSE) {
+            return FALSE;
+        }
+    }
+
+    if (deviceHandleMap[deviceIndex] == 0) {
+        printf("Invalid device handle.\n");
+        return FALSE;
+    }
+
+    status = DeviceIoControl(deviceHandleMap[deviceIndex],
+        US4OEM_WIN32_IOCTL_DEALLOCATE_DMA_SG_BUFFER,
         &inBuffer,
         sizeof(inBuffer),
         NULL,
@@ -1049,6 +1170,22 @@ int main() {
 	Us4OemReadStats(0);
     Us4OemDeallocAll(0);
     Us4OemReadStats(0);
+
+    // SG Alloc test
+	std::cout << std::endl << "====== DMA SG Alloc Test ======" << std::endl;
+
+	// Alloc 1600 MiB in 1 MiB - 4 KiB chunks
+	unsigned long sgAllocSize = 1600 * 1024 * 1024; // 1600 MiB
+	unsigned long sgChunkSize = 1024 * 1024 - 4 * 1024; // 1 MiB
+	std::cout << "Allocating DMA SG buffer length=0x" << std::hex << sgAllocSize << std::dec << " with chunk size=0x" << std::hex << sgChunkSize << std::dec << " for device 0..." << std::endl;
+	Us4OemAllocDmaSG(0, sgAllocSize, sgChunkSize);
+
+	Us4OemReadStats(0);
+
+	std::cin.get(); // Wait for user input before exiting
+
+	Us4OemDeallocAll(0); // Deallocate all buffers
+	Us4OemReadStats(0);
 
     // Clean up
     if (dev0bar4) {

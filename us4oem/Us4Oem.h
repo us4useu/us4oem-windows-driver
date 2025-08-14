@@ -40,6 +40,8 @@ typedef struct _US4OEM_CONTEXT
 
 	LINKED_LIST_POINTERS(WDFCOMMONBUFFER, DmaContiguousBuffers) // Linked list of contiguous DMA buffers
 
+	LINKED_LIST_POINTERS(WDFCOMMONBUFFER, DmaScatterGatherBuffers) // Linked list of scatter-gather DMA buffers
+
 } US4OEM_CONTEXT, *PUS4OEM_CONTEXT;
 
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(US4OEM_CONTEXT, us4oemGetContext)

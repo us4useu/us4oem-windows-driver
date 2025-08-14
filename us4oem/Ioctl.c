@@ -56,6 +56,19 @@ IOCTL_HANDLER handlers[] = {
 		us4oemIoctlDeallocateContigousDmaBuffer
     },
     {
+        US4OEM_WIN32_IOCTL_ALLOCATE_DMA_SG_BUFFER,
+        sizeof(us4oem_dma_allocation_argument), // Input buffer size
+		US4OEM_DMA_SG_RESPONSE_NEEDED_SIZE(1), // The size is checked dynamically, so just make sure we have enough space for the metadata at least
+        NULL, // Dynamic response size
+        us4oemIoctlAllocateDmaScatterGatherBuffer
+    },
+    {
+        US4OEM_WIN32_IOCTL_DEALLOCATE_DMA_SG_BUFFER,
+        sizeof(unsigned long long), // Input buffer size - PA of the allocated buffer
+        0, // No output buffer needed
+        us4oemIoctlDeallocateContigousDmaBuffer
+    },
+    {
         US4OEM_WIN32_IOCTL_DEALLOCATE_ALL_DMA_BUFFERS,
         0, // No input buffer needed
         0, // No output buffer needed

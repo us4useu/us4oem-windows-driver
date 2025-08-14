@@ -105,8 +105,15 @@ us4oemEvtIoDeviceControl(
                 WdfRequestComplete(Request, STATUS_BUFFER_TOO_SMALL);
                 return;
             }
-            // Call the handler function
-            handlers[i].HandlerFunc(WdfIoQueueGetDevice(Queue), Request, OutputBuffer, InputBuffer);
+
+            if (handlers[i].HandlerFuncWithBufferSizes) {
+                // If the handler uses dynamic buffer sizes, call it with the actual sizes
+                handlers[i].HandlerFuncWithBufferSizes(WdfIoQueueGetDevice(Queue), Request, OutputBuffer, InputBuffer, OutputBufferLength, InputBufferLength);
+			} else {
+                // Otherwise, just call the handler without buffer sizes
+                handlers[i].HandlerFunc(WdfIoQueueGetDevice(Queue), Request, OutputBuffer, InputBuffer);
+			}
+
             return;
         }
 	}
