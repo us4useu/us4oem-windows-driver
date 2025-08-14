@@ -472,6 +472,7 @@ Us4OemReadStats(int index)
 	std::cout << "  IRQ pending count: " << outBuffer.irq_pending_count << std::endl;
 	std::cout << "  DMA contiguous alloc count: " << outBuffer.dma_contig_alloc_count << std::endl;
     std::cout << "  DMA contiguous free count: " << outBuffer.dma_contig_free_count << std::endl;
+	std::cout << "  File open count: " << outBuffer.file_open_count << std::endl;
     std::cout << std::endl;
 
     if (deviceHandleMap.count(index) != 0 || deviceHandleMap[index] != INVALID_HANDLE_VALUE && deviceHandleMap[index] != 0) {
@@ -522,8 +523,8 @@ Us4OemAllocDmaContig(int deviceIndex, unsigned long length, bool quiet = false) 
     }
 
     if (!quiet) {
-	std::cout << "VA: 0x" << std::hex << outBuffer.va << std::dec << std::endl;
-	std::cout << "PA: 0x" << std::hex << outBuffer.pa << std::dec << std::endl;
+	    std::cout << "VA: 0x" << std::hex << outBuffer.va << std::dec << std::endl;
+	    std::cout << "PA: 0x" << std::hex << outBuffer.pa << std::dec << std::endl;
     }
 
     if (deviceHandleMap.count(deviceIndex) != 0 || deviceHandleMap[deviceIndex] != INVALID_HANDLE_VALUE && deviceHandleMap[deviceIndex] != 0) {

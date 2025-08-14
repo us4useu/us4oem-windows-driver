@@ -14,9 +14,11 @@ us4oemEvtDeviceFileCreate(
 	)
 {
 	UNREFERENCED_PARAMETER(FileObject);
-	UNREFERENCED_PARAMETER(Device);
 
 	PAGED_CODE();
+
+	PUS4OEM_CONTEXT deviceContext = us4oemGetContext(Device);
+	deviceContext->Stats.file_open_count++;
 
 	WdfRequestComplete(Request, STATUS_SUCCESS);
 }
