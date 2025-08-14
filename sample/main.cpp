@@ -483,7 +483,7 @@ Us4OemReadStats(int index)
 }
 
 std::pair<PVOID, unsigned long long>
-Us4OemAllocDmaContig(int deviceIndex, unsigned long length) {
+Us4OemAllocDmaContig(int deviceIndex, unsigned long length, bool quiet = false) {
     BOOL status = TRUE;
     us4oem_dma_contiguous_buffer_response outBuffer;
     us4oem_dma_allocation_argument inBuffer;
@@ -521,8 +521,10 @@ Us4OemAllocDmaContig(int deviceIndex, unsigned long length) {
         return { NULL, NULL };
     }
 
+    if (!quiet) {
 	std::cout << "VA: 0x" << std::hex << outBuffer.va << std::dec << std::endl;
 	std::cout << "PA: 0x" << std::hex << outBuffer.pa << std::dec << std::endl;
+    }
 
     if (deviceHandleMap.count(deviceIndex) != 0 || deviceHandleMap[deviceIndex] != INVALID_HANDLE_VALUE && deviceHandleMap[deviceIndex] != 0) {
         CloseHandle(deviceHandleMap[deviceIndex]);
@@ -1009,7 +1011,7 @@ int main() {
 	int numAllocations = 100;
 	std::vector<std::pair<PVOID, unsigned long long>> allocations;
     for (int i = 0; i < numAllocations; i++) {
-        std::pair<PVOID, unsigned long long> currentBuf = Us4OemAllocDmaContig(0, 0xA0);
+        std::pair<PVOID, unsigned long long> currentBuf = Us4OemAllocDmaContig(0, 0xA0, /*quiet*/ true);
 
         if (!currentBuf.first) {
             std::cout << "Failed to allocate DMA contiguous buffer " << i << "." << std::endl;
@@ -1034,7 +1036,7 @@ int main() {
 	std::vector<std::pair<PVOID, unsigned long long>> testAllocations;
 
     for (int i = 0; i < 5; i++) {
-        std::pair<PVOID, unsigned long long> currentBuf = Us4OemAllocDmaContig(0, 0x100);
+        std::pair<PVOID, unsigned long long> currentBuf = Us4OemAllocDmaContig(0, 0x100, /*quiet*/ true);
         if (!currentBuf.first) {
             std::cout << "Failed to allocate DMA contiguous buffer " << i << "." << std::endl;
             break; // Stop if allocation fails
