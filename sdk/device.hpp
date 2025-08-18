@@ -3,6 +3,46 @@
 #include "devicelocation.hpp"
 #include "common.hpp"
 
+class Us4OemDeviceStats {
+public:
+	Us4OemDeviceStats(us4oem_stats raw) :
+		irqCount(raw.irq_count),
+		pendingIrqCount(raw.irq_pending_count),
+		dmaContigAllocCount(raw.dma_contig_alloc_count),
+		dmaContigFreeCount(raw.dma_contig_free_count),
+		dmaSgAllocCount(raw.dma_sg_alloc_count),
+		dmaSgFreeCount(raw.dma_sg_free_count),
+		fileOpenCount(raw.file_open_count) {}
+
+	std::string toString() const {
+		return std::format("  IRQ Count: {}\n"
+			"  Pending IRQ Count: {}\n"
+			"  Contiguous DMA Allocations: {}\n"
+			"  Contiguous DMA Frees: {}\n"
+			"  SG DMA Allocations: {}\n"
+			"  SG DMA Frees: {}\n"
+			"  File Open Count: {}",
+			irqCount, 
+			pendingIrqCount,
+			dmaContigAllocCount, 
+			dmaContigFreeCount,
+			dmaSgAllocCount, 
+			dmaSgFreeCount,
+			fileOpenCount);
+	}
+
+	// Note: public, as this is more of a struct than a class.
+	size_t irqCount; // Total number of IRQs received
+	size_t pendingIrqCount; // Number of IRQs pending to be handled
+
+	size_t dmaContigAllocCount; // Number of contiguous DMA buffers currently allocated
+	size_t dmaContigFreeCount; // Number of DMA buffers freed total
+	size_t dmaSgAllocCount; // Number of scatter-gather DMA buffers currently allocated
+	size_t dmaSgFreeCount; // Number of scatter-gather DMA buffers freed total
+
+	size_t fileOpenCount; // Number of times the device char device has been opened to be used by a client
+};
+
 class Us4OemDevice {
 public:
 	Us4OemDevice(const Us4OemDeviceLocation& loc) :
@@ -75,6 +115,36 @@ public:
 			(driverInfo.version & 0x00FF0000) >> 16,
 			(driverInfo.version & 0x0000FF00) >> 8,
 			driverInfo.version & 0x000000FF);
+	}
+
+	// Map BAR 0/4 to userspace
+	std::pair<void*, size_t> mapBar(int bar) {
+		if (bar != 0 && bar != 4) {
+			throw std::range_error("Only BAR 0 and 4 are supported!");
+		}
+
+		us4oem_mmap_argument arg;
+		arg.area = (bar == 0) ? MMAP_AREA_BAR_0 : MMAP_AREA_BAR_4;
+		arg.length_limit = 0; // Map the whole area
+		// arg.va is ignored for BARs
+
+		us4oem_mmap_response response;
+		ioctl(US4OEM_WIN32_IOCTL_MMAP, &arg, sizeof(arg), &response, sizeof(response));
+
+		if (response.address == NULL) {
+			throw std::runtime_error("Failed to map BAR " + std::to_string(bar));
+		}
+
+		return { response.address, response.length_mapped };
+	}
+
+	// Read stats
+	Us4OemDeviceStats readStats() {
+		us4oem_stats stats;
+
+		ioctl(US4OEM_WIN32_IOCTL_READ_STATS, NULL, 0, &stats, sizeof(stats));
+
+		return Us4OemDeviceStats(stats);
 	}
 
 private:

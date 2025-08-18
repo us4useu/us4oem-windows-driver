@@ -27,6 +27,26 @@ void test(const Us4OemDeviceLocation& location) {
 		std::cerr << "KMD not compatible; not continuing." << std::endl;
 		return;
 	}
+
+	// Bar 0 mapping test
+	std::cout << std::endl << "====== BAR Mapping Test ======" << std::endl;
+	auto bar0 = d.mapBar(0);
+	std::cout << "BAR 0 mapped at: 0x" << std::hex << bar0.first << " length: 0x" << bar0.second << std::dec << std::endl;
+	std::cout << "  @ offset 0x0: 0x" << std::hex << *(unsigned int*)((char*)bar0.first + 0x0) << std::dec << std::endl;
+
+	// Bar 4 mapping test
+	auto bar4 = d.mapBar(4);
+	std::cout << "BAR 4 mapped at: 0x" << std::hex << bar4.first << " length: 0x" << bar4.second << std::dec << std::endl;
+	std::cout << "  @ offset 0x0: 0x" << std::hex << *(unsigned int*)((char*)bar4.first + 0x0) << std::dec << std::endl;
+	// We are expecting 0x0 to be 0x0100_00ED
+	if (*(unsigned int*)((char*)bar4.first + 0x0) != 0x010000ED) {
+		std::cerr << "Unexpected value at BAR 4 offset 0x0: 0x" << std::hex << *(unsigned int*)((char*)bar4.first + 0x0) << std::dec << std::endl;
+		return;
+	}
+
+	// Read stats
+	std::cout << std::endl << "====== Read Stats Test ======" << std::endl;
+	std::cout << "Stats: " << std::endl << d.readStats().toString() << std::endl;
 }
 
 int main() {
