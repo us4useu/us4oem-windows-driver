@@ -2,6 +2,20 @@
 
 #include <iostream>
 
+const bool QEMU_TEST = true;
+
+bool qemuTriggerIrq(void* bar4) {
+	if (!QEMU_TEST) {
+		std::cerr << "QEMU test is disabled; cannot trigger IRQ." << std::endl;
+		return false;
+	}
+	// Assert an IRQ
+	((int*)bar4)[0x60 / sizeof(int)] = 0x01;
+	((int*)bar4)[0x64 / sizeof(int)] = 0x01;
+	Sleep(100); // Wait a bit for QEMU to trigger the IRQ, Windows to handle it, DPC to fire etc.
+	return true;
+}
+
 void test(const Us4OemDeviceLocation& location) {
 	std::cout << std::endl << "========== Testing on " << location.toString() << "==========" << std::endl;
 	std::cout << "System path: " << location.getSystemPath() << std::endl;
@@ -47,10 +61,64 @@ void test(const Us4OemDeviceLocation& location) {
 	// Read stats
 	std::cout << std::endl << "====== Read Stats Test ======" << std::endl;
 	std::cout << "Stats: " << std::endl << d.readStats().toString() << std::endl;
+
+	// IRQ Polling Test
+	std::cout << std::endl << "====== IRQ Polling Test ======" << std::endl;
+	// We can only test this in QEMU, as it simulates the IRQs.
+	if (QEMU_TEST) {
+		// Assert an IRQ
+		qemuTriggerIrq(bar4.first);
+
+		std::cout << "Polling for IRQ..." << std::endl;
+		d.poll();
+		std::cout << "IRQ received." << std::endl;
+
+		// Trigger another IRQ
+		qemuTriggerIrq(bar4.first);
+
+		// Test non-blocking poll
+		std::cout << "Polling for IRQ non-blocking..." << std::endl;
+		if (d.pollNonBlocking()) {
+			std::cout << "IRQ received (non-blocking)." << std::endl;
+		} else {
+			std::cerr << "No IRQ pending (non-blocking)." << std::endl;
+			return;
+		}
+
+		// Try another time, this time we should get false
+		std::cout << "Polling for IRQ non-blocking (another time)..." << std::endl;
+		if (d.pollNonBlocking()) {
+			std::cerr << "IRQ received (non-blocking). This is incorrect." << std::endl;
+			return;
+		}
+		else {
+			std::cout << "No IRQ pending (non-blocking). This is expected." << std::endl;
+		}
+
+		// Create another IRQ, and clear pending IRQs
+		qemuTriggerIrq(bar4.first);
+
+		std::cout << "Clearing pending IRQs..." << std::endl;
+		d.pollClearPending();
+
+		Us4OemDeviceStats stats = d.readStats();
+		std::cout << "Stats after clearing pending IRQs: " << std::endl << stats.toString() << std::endl;
+		if (stats.pendingIrqCount != 0) {
+			std::cerr << "Pending IRQ count is not zero after clearing: " << stats.pendingIrqCount << std::endl;
+			return;
+		}
+
+	} else {
+		std::cout << "Skipping IRQ polling test, not running in QEMU." << std::endl;
+	}
 }
 
 int main() {
 	Us4OemDriverSdk sdk = Us4OemDriverSdk();
+
+	if (QEMU_TEST) {
+		std::cout << "Running in QEMU." << std::endl;
+	}
 
 	size_t deviceCount = sdk.getDeviceCount();
 	std::cout << "Found " << deviceCount << " us4oem devices." << std::endl;

@@ -147,6 +147,28 @@ public:
 		return Us4OemDeviceStats(stats);
 	}
 
+	// Polls the device for pending IRQs. Note: BLOCKS THREAD UNTIL AN IRQ IS RECEIVED, IF NONE ARE PENDING.
+	bool poll() {
+		return ioctl(US4OEM_WIN32_IOCTL_POLL, NULL, 0, NULL, 0);
+	}
+
+	// Non-blocking poll for pending IRQs. Returns true if an IRQ is pending, false otherwise.
+	bool pollNonBlocking() {
+		try {
+			ioctl(US4OEM_WIN32_IOCTL_POLL_NONBLOCKING, NULL, 0, NULL, 0);
+			return true; // IRQ is pending
+		}
+		catch (const std::runtime_error&) {
+			// TODO: Handle other errors
+			return false;
+		}
+	}
+
+	// Clears all pending IRQs. Note: this does not complete any poll requests.
+	bool pollClearPending() {
+		return ioctl(US4OEM_WIN32_IOCTL_CLEAR_PENDING, NULL, 0, NULL, 0);
+	}
+
 private:
 	// Wrapper for DeviceIoControl to reduce boilerplate.
 	bool ioctl(unsigned long ioctlCode, void* inputBuffer, unsigned long inputSize, void* outputBuffer, unsigned long outputSize) {
