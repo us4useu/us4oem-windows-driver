@@ -250,6 +250,12 @@ public:
 		return ioctl(US4OEM_WIN32_IOCTL_DEALLOCATE_ALL_DMA_BUFFERS, nullptr, nullptr);
 	}
 
+	// Sets the sticky mode for the device.
+	// If enabled, the DMA buffers will automatically be deallocated when the device handle is closed.
+	bool setStickyMode(bool status) {
+		return ioctl(US4OEM_WIN32_IOCTL_SET_STICKY_MODE, &status, nullptr);
+	}
+
 private:
 	// A wrapper^2 of the ioctl function
 	// This function allows us to omit the input/output buffer sizes, as it's: a) inconvenient, and 

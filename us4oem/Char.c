@@ -28,9 +28,32 @@ us4oemEvtFileClose(
 	_In_ WDFFILEOBJECT FileObject
 	)
 {
-	UNREFERENCED_PARAMETER(FileObject);
-
 	PAGED_CODE();
+
+	WDFDEVICE device = WdfFileObjectGetDevice(FileObject);
+	PUS4OEM_CONTEXT deviceContext = us4oemGetContext(device);
+
+	if (deviceContext->StickyMode) {
+		// Sticky mode enabled - clean buffers as soon as the file is closed
+		LINKED_LIST_FOR_EACH(WDFCOMMONBUFFER, deviceContext->DmaContiguousBuffers, commonBuffer) {
+			if (commonBuffer->Item != NULL) {
+				WdfObjectDelete(*commonBuffer->Item);
+				deviceContext->Stats.dma_contig_free_count++;
+			}
+		}
+		LINKED_LIST_FOR_EACH(WDFCOMMONBUFFER, deviceContext->DmaScatterGatherBuffers, commonBuffer) {
+			if (commonBuffer->Item != NULL) {
+				WdfObjectDelete(*commonBuffer->Item);
+				deviceContext->Stats.dma_sg_free_count++;
+			}
+		}
+
+		deviceContext->Stats.dma_sg_alloc_count = 0;
+		deviceContext->Stats.dma_contig_alloc_count = 0;
+
+		LINKED_LIST_CLEAR(WDFCOMMONBUFFER, deviceContext->DmaContiguousBuffers);
+		LINKED_LIST_CLEAR(WDFCOMMONBUFFER, deviceContext->DmaScatterGatherBuffers);
+	}
 
 	TraceEvents(TRACE_LEVEL_INFORMATION,
 		TRACE_QUEUE,

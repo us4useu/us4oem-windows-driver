@@ -229,6 +229,31 @@ void test(const Us4OemDeviceLocation& location) {
 
 	stats = d.readStats();
 	std::cout << "Stats after deallocating: " << std::endl << stats.toString() << std::endl;
+
+	// Set sticky mode
+	std::cout << std::endl << "====== Sticky Mode Test ======" << std::endl;
+	if (d.setStickyMode(true)) {
+		std::cout << "Sticky mode set successfully." << std::endl;
+	} else {
+		std::cerr << "Failed to set sticky mode." << std::endl;
+		return;
+	}
+
+	// Allocate a DMA contiguous buffer to test sticky mode
+	auto stickyBuffer = d.allocDmaContig(1024 * 1024); // 1 MiB
+
+	// Now close the device handle
+	d.close();
+	d.open();
+
+	// Check if there's still a buffer allocated
+	stats = d.readStats();
+	if (stats.dmaContigAllocCount > 0) {
+		std::cerr << "Sticky mode failed: DMA contiguous buffer is still allocated after reopening the device." << std::endl;
+		return;
+	} else {
+		std::cerr << "Sticky mode works: no DMA contiguous buffer allocated after reopening the device." << std::endl;
+	}
 }
 
 int main() {

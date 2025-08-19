@@ -23,7 +23,7 @@ typedef unsigned long us4oem_driver_version_t;
 
 // Can be used to check if the driver version is compatible with the application.
 // Also used in the IOCTL handler itself.
-#define US4OEM_DRIVER_VERSION ASSEMBLE_US4OEM_DRIVER_VERSION(0, 4, 1)
+#define US4OEM_DRIVER_VERSION ASSEMBLE_US4OEM_DRIVER_VERSION(0, 5, 0)
 
 // Define an Interface Guid so that apps can find the device and talk to it.
 DEFINE_GUID (GUID_DEVINTERFACE_us4oem,
@@ -80,6 +80,11 @@ DEFINE_GUID (GUID_DEVINTERFACE_us4oem,
 // Deallocate all DMA buffers allocated by the device.
 #define US4OEM_WIN32_IOCTL_DEALLOCATE_ALL_DMA_BUFFERS \
     CTL_CODE(FILE_DEVICE_UNKNOWN, US4OEM_WIN32_IOCTL_BASE + 10, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+// Set sticky buffering mode. If enabled, buffers will be released as soon as the device handle is closed.
+// Call with bool in the input buffer.
+#define US4OEM_WIN32_IOCTL_SET_STICKY_MODE \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, US4OEM_WIN32_IOCTL_BASE + 11, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
 // ====== Driver Information Structure ======
 typedef struct _us4oem_driver_info {

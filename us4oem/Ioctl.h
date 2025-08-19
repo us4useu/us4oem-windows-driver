@@ -4,6 +4,8 @@
 #include <wdf.h>
 #include <initguid.h>
 
+#include <stdbool.h>
+
 #include "us4oem.h"
 #include "queue.h"
 #include "trace.h"
@@ -28,6 +30,7 @@ typedef struct _IOCTL_HANDLER {
 // Defined in Ioctl.c
 IOCTL_HANDLER_FUNC us4oemIoctlGetDriverInfo;
 IOCTL_HANDLER_FUNC us4oemIoctlReadStats;
+IOCTL_HANDLER_FUNC us4oemIoctlSetStickyMode;
 
 // Defined in Mem.c
 IOCTL_HANDLER_FUNC us4oemIoctlMmap;

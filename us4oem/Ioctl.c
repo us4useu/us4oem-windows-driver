@@ -4,6 +4,7 @@
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text (PAGE, us4oemIoctlGetDriverInfo)
 #pragma alloc_text (PAGE, us4oemIoctlReadStats)
+#pragma alloc_text (PAGE, us4oemIoctlSetStickyMode)
 #endif
 
 IOCTL_HANDLER handlers[] = {
@@ -73,6 +74,12 @@ IOCTL_HANDLER handlers[] = {
         0, // No input buffer needed
         0, // No output buffer needed
         us4oemIoctlDeallocateAllDmaBuffers
+    },
+    {
+        US4OEM_WIN32_IOCTL_SET_STICKY_MODE,
+		sizeof(bool), // Bool indicating whether to enable sticky mode
+		0, // No output buffer needed
+		us4oemIoctlSetStickyMode
     }
 };
 
@@ -82,6 +89,22 @@ PIOCTL_HANDLER us4oemGetIoctlHandler() {
 
 ULONG us4oemGetIoctlHandlerCount() {
 	return sizeof(handlers) / sizeof(IOCTL_HANDLER);
+}
+
+VOID us4oemIoctlSetStickyMode(
+    WDFDEVICE Device, WDFREQUEST Request, PVOID OutputBuffer, PVOID InputBuffer
+) {
+    UNREFERENCED_PARAMETER(OutputBuffer);
+    UNREFERENCED_PARAMETER(Device);
+
+    PAGED_CODE();
+
+    bool stickyMode = *(bool*)InputBuffer;
+
+    PUS4OEM_CONTEXT deviceContext = us4oemGetContext(Device);
+    deviceContext->StickyMode = stickyMode;
+
+    WdfRequestCompleteWithInformation(Request, STATUS_SUCCESS, 0);
 }
 
 VOID us4oemIoctlGetDriverInfo(

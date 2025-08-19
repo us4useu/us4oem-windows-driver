@@ -38,6 +38,8 @@ typedef struct _US4OEM_CONTEXT
 
 	WDFDMAENABLER DmaEnabler; // DMA enabler for the device
 
+	BOOLEAN StickyMode; // If TRUE, buffers will be released as soon as the device handle is closed
+
 	LINKED_LIST_POINTERS(WDFCOMMONBUFFER, DmaContiguousBuffers) // Linked list of contiguous DMA buffers
 
 	LINKED_LIST_POINTERS(WDFCOMMONBUFFER, DmaScatterGatherBuffers) // Linked list of scatter-gather DMA buffers
