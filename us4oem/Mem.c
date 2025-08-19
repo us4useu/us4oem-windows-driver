@@ -36,6 +36,7 @@ VOID us4oemIoctlMmap(
         address = deviceContext->BarPciDma.MappedAddress;
         length = deviceContext->BarPciDma.Length;
         break;
+
     case MMAP_AREA_BAR_4:
         if (!deviceContext->BarUs4Oem.MappedAddress) {
             WdfRequestComplete(Request, STATUS_DEVICE_UNREACHABLE);
@@ -43,6 +44,7 @@ VOID us4oemIoctlMmap(
         address = deviceContext->BarUs4Oem.MappedAddress;
         length = deviceContext->BarUs4Oem.Length;
         break;
+
     case MMAP_AREA_DMA:
         if (!arg.va) {
             TraceEvents(TRACE_LEVEL_ERROR,
@@ -52,16 +54,39 @@ VOID us4oemIoctlMmap(
             return;
         }
 
-        // For DMA areas, we assume the user has provided a valid virtual address
-        address = arg.va;
-        length = arg.length_limit; // Use the length limit provided by the user
+		// Try to find the DMA area by virtual address
+		address = arg.va; // Use the virtual address provided by the user
 
-		// Check if the length is valid
+		BOOLEAN found = FALSE;
+        LINKED_LIST_FOR_EACH(WDFCOMMONBUFFER, deviceContext->DmaContiguousBuffers, commonBuffer) {
+            if (found) {
+                break; // No need to continue if we already found it
+            }
+            if (commonBuffer->Item != NULL &&
+                WdfCommonBufferGetAlignedVirtualAddress(*commonBuffer->Item) == address) {
+                length = (ULONG)WdfCommonBufferGetLength(*commonBuffer->Item);
+				found = TRUE;
+                break;
+            }
+		}
+        LINKED_LIST_FOR_EACH(WDFCOMMONBUFFER, deviceContext->DmaScatterGatherBuffers, commonBuffer) {
+            if (found) {
+                break; // No need to continue if we already found it
+			}
+            if (commonBuffer->Item != NULL &&
+                WdfCommonBufferGetAlignedVirtualAddress(*commonBuffer->Item) == address) {
+                length = (ULONG)WdfCommonBufferGetLength(*commonBuffer->Item);
+                found = TRUE;
+                break;
+            }
+        }
+
         if (length == 0) {
             TraceEvents(TRACE_LEVEL_ERROR,
                 TRACE_IOCTL,
-                "Length for DMA area cannot be zero");
-            WdfRequestComplete(Request, STATUS_INVALID_PARAMETER);
+                "Failed to find DMA area with VA %p",
+                address);
+            WdfRequestComplete(Request, STATUS_NOT_FOUND);
             return;
 		}
 
