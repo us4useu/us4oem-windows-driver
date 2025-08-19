@@ -23,7 +23,7 @@ typedef unsigned long us4oem_driver_version_t;
 
 // Can be used to check if the driver version is compatible with the application.
 // Also used in the IOCTL handler itself.
-#define US4OEM_DRIVER_VERSION ASSEMBLE_US4OEM_DRIVER_VERSION(0, 4, 0)
+#define US4OEM_DRIVER_VERSION ASSEMBLE_US4OEM_DRIVER_VERSION(0, 4, 1)
 
 // Define an Interface Guid so that apps can find the device and talk to it.
 DEFINE_GUID (GUID_DEVINTERFACE_us4oem,

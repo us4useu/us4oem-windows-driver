@@ -56,7 +56,7 @@ VOID us4oemIoctlDeallocateScatterGatherDmaBuffer(
 
     UNREFERENCED_PARAMETER(OutputBuffer);
 
-    void* va = InputBuffer;
+    void* va = (*(void**)(InputBuffer));
     PUS4OEM_CONTEXT deviceContext = us4oemGetContext(Device);
 
     // Iterate over the contiguous buffers until we find the one with the matching PA

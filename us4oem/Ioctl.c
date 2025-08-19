@@ -64,9 +64,9 @@ IOCTL_HANDLER handlers[] = {
     },
     {
         US4OEM_WIN32_IOCTL_DEALLOCATE_DMA_SG_BUFFER,
-        sizeof(unsigned long long), // Input buffer size - PA of the allocated buffer
+        sizeof(void*), // Input buffer size - VA of the allocated buffer
         0, // No output buffer needed
-        us4oemIoctlDeallocateContigousDmaBuffer
+        us4oemIoctlDeallocateScatterGatherDmaBuffer
     },
     {
         US4OEM_WIN32_IOCTL_DEALLOCATE_ALL_DMA_BUFFERS,
