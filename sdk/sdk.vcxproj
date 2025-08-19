@@ -43,6 +43,7 @@
     <ClInclude Include="devicelocation.hpp" />
     <ClInclude Include="driver.hpp" />
     <ClInclude Include="sdk.hpp" />
+    <ClInclude Include="sg.hpp" />
     <ClInclude Include="stats.hpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

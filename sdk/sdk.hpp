@@ -5,4 +5,5 @@
 #include "stats.hpp"
 #include "device.hpp"
 #include "devicelocation.hpp"
+#include "sg.hpp"
 #include "driver.hpp"

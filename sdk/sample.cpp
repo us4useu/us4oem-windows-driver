@@ -160,6 +160,75 @@ void test(const Us4OemDeviceLocation& location) {
 	} else {
 		std::cerr << "Failed to allocate DMA contiguous buffer." << std::endl;
 	}
+
+	// DMA Scatter-Gather Buffer Allocation Test
+	std::cout << std::endl << "====== DMA Scatter-Gather Buffer Alloc Test ======" << std::endl;
+
+	// Sanity check
+	d.deallocAll();
+
+	// Let's allocate a large scatter-gather buffer, 1600 MiB, 0.5 MiB chunks.
+	unsigned long sgAllocSize = 1600 * 1024 * 1024; // 1600 MiB
+	unsigned long sgChunkSize = 512 * 1024 - 4 * 1024; // 0.5 MiB
+
+	std::cout << "Allocating DMA scatter-gather buffer length=0x" << std::hex << sgAllocSize << std::dec 
+		<< " with chunk size=0x" << std::hex << sgChunkSize << std::dec << " for device..." << std::endl;
+
+	std::vector<Us4OemDmaSgChunk> sgChunks = {};
+
+	auto status = d.allocDmaScatterGather(sgAllocSize, sgChunkSize, sgChunks);
+	if (!status) {
+		std::cerr << "Failed to allocate DMA scatter-gather buffer." << std::endl;
+		return;
+	}
+
+	std::cout << "Allocated " << sgChunks.size() << " chunks" << std::endl;
+	for (int i = 0; i < sgChunks.size(); ++i) {
+		if (i % 100 == 0) {
+			std::cout << "  Chunk " << i << ": VA: 0x" << std::hex << sgChunks[i].va
+				<< ", PA: 0x" << sgChunks[i].pa <<
+				", length: 0x" << sgChunks[i].length << std::dec << std::endl;
+		}
+	}
+
+	// Deallocate the DMA scatter-gather buffer
+	std::cout << "Deallocating DMA scatter-gather buffer..." << std::endl;
+	if (d.deallocDmaScatterGather(sgChunks)) {
+		std::cout << "DMA scatter-gather buffer deallocated successfully." << std::endl;
+	} else {
+		std::cerr << "Failed to deallocate DMA scatter-gather buffer." << std::endl;
+		return;
+	}
+
+	// Print stats
+	Us4OemDeviceStats stats = d.readStats();
+	std::cout << "Stats after deallocating: " << std::endl << stats.toString() << std::endl;
+
+	// Allocate 1 MiB in 16 KiB chunks to test DMA deallocate all
+	std::cout << std::endl << "====== DMA Deallocate All Test ======" << std::endl;
+
+	sgAllocSize = 1024 * 1024; // 1 MiB
+	sgChunkSize = 16 * 1024; // 16 KiB
+	status = d.allocDmaScatterGather(sgAllocSize, sgChunkSize, sgChunks);
+
+	if (!status) {
+		std::cerr << "Failed to allocate DMA scatter-gather buffer for deallocate all test." << std::endl;
+		return;
+	}
+
+	stats = d.readStats();
+	std::cout << "Stats before deallocating: " << std::endl << stats.toString() << std::endl;
+
+	std::cout << "Deallocating all DMA buffers..." << std::endl;
+	if (d.deallocAll()) {
+		std::cout << "All DMA buffers deallocated successfully." << std::endl;
+	} else {
+		std::cerr << "Failed to deallocate all DMA buffers." << std::endl;
+		return;
+	}
+
+	stats = d.readStats();
+	std::cout << "Stats after deallocating: " << std::endl << stats.toString() << std::endl;
 }
 
 int main() {

@@ -33,6 +33,9 @@
     <ClInclude Include="stats.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="sg.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="sample.cpp">

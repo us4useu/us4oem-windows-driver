@@ -1,12 +1,13 @@
 #pragma once
 
 #include "devicelocation.hpp"
+#include "sg.hpp"
 #include "common.hpp"
 
 // This is ~awful and unsafe~, but in the specific use below it's basically the only way to
 // have a function template that can take nullptr or a pointer type.
 template<class T>
-concept NullablePtr = std::is_pointer_v<T> || std::is_null_pointer_v<T>;
+concept NullablePtr = (std::is_pointer_v<T> || std::is_null_pointer_v<T>) && !std::is_const_v<T>;
 
 class Us4OemDevice {
 public:
@@ -187,6 +188,66 @@ public:
 	// Dealloc contiguous DMA buffer.
 	bool deallocDmaContig(unsigned long long pa) {
 		return ioctl(US4OEM_WIN32_IOCTL_DEALLOCATE_DMA_CONTIGIOUS_BUFFER, &pa, nullptr);
+	}
+
+	// Allocates a scatter-gather DMA buffer.
+	// Note: due to how the driver works, we have to use ugly malloc to allocate the response buffer.
+	bool allocDmaScatterGather(unsigned long length, unsigned long chunkSize, std::vector<Us4OemDmaSgChunk>& addresses) {
+
+		unsigned long needed_size = US4OEM_DMA_SG_RESPONSE_NEEDED_SIZE(US4OEM_DMA_SG_CHUNK_COUNT(length, chunkSize));
+
+		auto response = (us4oem_dma_scatter_gather_buffer_response*)malloc(needed_size);
+
+		us4oem_dma_allocation_argument arg = {};
+		arg.length = length;
+		arg.chunk_size = chunkSize;
+
+		// Use raw ioctl as the template can only deduce the size of const types.
+		ioctlRaw(US4OEM_WIN32_IOCTL_ALLOCATE_DMA_SG_BUFFER, 
+			&arg, 
+			sizeof(us4oem_dma_allocation_argument), 
+			response, 
+			needed_size);
+
+		if (response->chunk_count == 0) {
+			free(response);
+			return false;
+		}
+
+		addresses.reserve(response->chunk_count);
+
+		for (unsigned int i = 0; i < response->chunk_count; i++) {
+			addresses.push_back({
+				response->chunks[i].va, // Virtual address of the chunk
+				response->chunks[i].pa,  // Physical address of the chunk
+				response->chunks[i].length // Length of the chunk
+			});
+		}
+
+		free(response); 
+
+		return true;
+	}
+
+	bool deallocDmaScatterGather(std::vector<Us4OemDmaSgChunk>& chunks) {
+		if (chunks.empty()) {
+			return true; // Nothing to deallocate
+		}
+
+		for (const auto& chunk : chunks) {
+			void* va = chunk.va; // Get rid of constness
+			ioctl(US4OEM_WIN32_IOCTL_DEALLOCATE_DMA_SG_BUFFER, 
+				&va,
+				nullptr);
+		}
+
+		chunks.clear(); // Clear the vector after deallocation
+
+		return true;
+	}
+
+	bool deallocAll() {
+		return ioctl(US4OEM_WIN32_IOCTL_DEALLOCATE_ALL_DMA_BUFFERS, nullptr, nullptr);
 	}
 
 private:
