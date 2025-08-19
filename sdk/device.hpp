@@ -63,6 +63,17 @@ public:
 		}
 	}
 
+	// A pair of virtual and physical addresses.
+	struct VirtualAndPhysicalAddress {
+		void* va; // Virtual address of the area; note: not accessible from user space - needs mapping
+		size_t pa; // Physical address of the area
+	};
+
+	struct MemoryMapping {
+		void* address; // Virtual address of the mapped area
+		size_t lengthMapped; // Length of the mapped area
+	};
+
 	// Opens the device
 	bool open() {
 		if (isHandleOpen) {
@@ -131,7 +142,7 @@ public:
 	}
 
 	// Map BAR 0/4 to userspace
-	std::pair<void*, size_t> mapBar(int bar) {
+	MemoryMapping mapBar(int bar) {
 		if (bar != 0 && bar != 4) {
 			throw std::range_error("Only BAR 0 and 4 are supported!");
 		}
@@ -146,6 +157,24 @@ public:
 
 		if (response.address == NULL) {
 			throw std::runtime_error("Failed to map BAR " + std::to_string(bar));
+		}
+
+		return { response.address, response.length_mapped };
+	}
+
+	// Map DMA buffer to userspace.
+	MemoryMapping mapDmaBuf(void* va, unsigned long length_limit = 0) {
+		us4oem_mmap_argument arg = {};
+		arg.area = MMAP_AREA_DMA;
+		arg.va = va;
+		arg.length_limit = length_limit;
+
+		us4oem_mmap_response response = {};
+
+		ioctl(US4OEM_WIN32_IOCTL_MMAP, &arg, &response);
+
+		if (response.address == NULL) {
+			throw std::runtime_error("Failed to map DMA buffer");
 		}
 
 		return { response.address, response.length_mapped };
@@ -180,6 +209,26 @@ public:
 	// Clears all pending IRQs. Note: this does not complete any poll requests.
 	bool pollClearPending() {
 		return ioctl<nullptr_t,nullptr_t>(US4OEM_WIN32_IOCTL_CLEAR_PENDING, nullptr, nullptr);
+	}
+
+	// Alloc contiguous DMA buffer.
+	VirtualAndPhysicalAddress allocDmaContig(unsigned long length) {
+		us4oem_dma_contiguous_buffer_response response = {};
+		us4oem_dma_allocation_argument arg = {};
+		arg.length = length;
+
+		ioctl(US4OEM_WIN32_IOCTL_ALLOCATE_DMA_CONTIGIOUS_BUFFER, &arg, &response);
+
+		if (response.va == NULL) {
+			throw std::runtime_error("Failed to allocate contiguous DMA buffer");
+		}
+
+		return { response.va, response.pa };
+	}
+
+	// Dealloc contiguous DMA buffer.
+	bool deallocDmaContig(unsigned long long pa) {
+		return ioctl(US4OEM_WIN32_IOCTL_DEALLOCATE_DMA_CONTIGIOUS_BUFFER, &pa, nullptr);
 	}
 
 private:

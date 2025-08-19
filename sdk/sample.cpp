@@ -45,16 +45,16 @@ void test(const Us4OemDeviceLocation& location) {
 	// Bar 0 mapping test
 	std::cout << std::endl << "====== BAR Mapping Test ======" << std::endl;
 	auto bar0 = d.mapBar(0);
-	std::cout << "BAR 0 mapped at: 0x" << std::hex << bar0.first << " length: 0x" << bar0.second << std::dec << std::endl;
-	std::cout << "  @ offset 0x0: 0x" << std::hex << *(unsigned int*)((char*)bar0.first + 0x0) << std::dec << std::endl;
+	std::cout << "BAR 0 mapped at: 0x" << std::hex << bar0.address << " length: 0x" << bar0.lengthMapped << std::dec << std::endl;
+	std::cout << "  @ offset 0x0: 0x" << std::hex << *(unsigned int*)((char*)bar0.address + 0x0) << std::dec << std::endl;
 
 	// Bar 4 mapping test
 	auto bar4 = d.mapBar(4);
-	std::cout << "BAR 4 mapped at: 0x" << std::hex << bar4.first << " length: 0x" << bar4.second << std::dec << std::endl;
-	std::cout << "  @ offset 0x0: 0x" << std::hex << *(unsigned int*)((char*)bar4.first + 0x0) << std::dec << std::endl;
+	std::cout << "BAR 4 mapped at: 0x" << std::hex << bar4.address << " length: 0x" << bar4.lengthMapped << std::dec << std::endl;
+	std::cout << "  @ offset 0x0: 0x" << std::hex << *(unsigned int*)((char*)bar4.address + 0x0) << std::dec << std::endl;
 	// We are expecting 0x0 to be 0x0100_00ED
-	if (*(unsigned int*)((char*)bar4.first + 0x0) != 0x010000ED) {
-		std::cerr << "Unexpected value at BAR 4 offset 0x0: 0x" << std::hex << *(unsigned int*)((char*)bar4.first + 0x0) << std::dec << std::endl;
+	if (*(unsigned int*)((char*)bar4.address + 0x0) != 0x010000ED) {
+		std::cerr << "Unexpected value at BAR 4 offset 0x0: 0x" << std::hex << *(unsigned int*)((char*)bar4.address + 0x0) << std::dec << std::endl;
 		return;
 	}
 
@@ -67,14 +67,14 @@ void test(const Us4OemDeviceLocation& location) {
 	// We can only test this in QEMU, as it simulates the IRQs.
 	if (QEMU_TEST) {
 		// Assert an IRQ
-		qemuTriggerIrq(bar4.first);
+		qemuTriggerIrq(bar4.address);
 
 		std::cout << "Polling for IRQ..." << std::endl;
 		d.poll();
 		std::cout << "IRQ received." << std::endl;
 
 		// Trigger another IRQ
-		qemuTriggerIrq(bar4.first);
+		qemuTriggerIrq(bar4.address);
 
 		// Test non-blocking poll
 		std::cout << "Polling for IRQ non-blocking..." << std::endl;
@@ -96,7 +96,7 @@ void test(const Us4OemDeviceLocation& location) {
 		}
 
 		// Create another IRQ, and clear pending IRQs
-		qemuTriggerIrq(bar4.first);
+		qemuTriggerIrq(bar4.address);
 
 		std::cout << "Clearing pending IRQs..." << std::endl;
 		d.pollClearPending();
@@ -110,6 +110,55 @@ void test(const Us4OemDeviceLocation& location) {
 
 	} else {
 		std::cout << "Skipping IRQ polling test, not running in QEMU." << std::endl;
+	}
+
+	// DMA Contiguous Buffer Allocation Test
+	std::cout << std::endl << "====== DMA Contiguous Buffer Alloc Test ======" << std::endl;
+
+	// Let's alloc 1 MiB as that's the max size, per the spec.
+	unsigned long size = 1024 * 1024; // 1 MiB
+	std::cout << "Allocating DMA contiguous buffer length=0x" << std::hex << size << std::dec << " for device..." << std::endl;
+
+	auto dmaBuffer = d.allocDmaContig(size);
+	if (dmaBuffer.va) {
+		std::cout << "DMA contiguous buffer allocated at VA: 0x" << std::hex << dmaBuffer.va << " PA: 0x" << dmaBuffer.pa << std::dec << std::endl;
+		
+		// Map the allocated DMA buffer
+		std::cout << "Mapping DMA buffer..." << std::endl;
+		auto mappedBuffer = d.mapDmaBuf(dmaBuffer.va);
+
+		if (mappedBuffer.address) {
+			std::cout << "Mapped DMA buffer at: 0x" << std::hex << mappedBuffer.address << std::dec << std::endl;
+			
+
+			// Write anything to check if the mapping works
+			std::cout << "Writing to the mapped DMA buffer..." << std::endl;
+			static_cast<int*>(mappedBuffer.address)[0] = 0xAA; // Write a byte to the first byte of the buffer
+			// Read back to verify
+			std::cout << "Reading back from the mapped DMA buffer..." << std::endl;
+			if (static_cast<int*>(mappedBuffer.address)[0] == 0xAA) {
+				std::cout << "Mapped DMA buffer read back successfully." << std::endl;
+			} else {
+				std::cerr << "Mapped DMA buffer read back failed." << std::endl;
+				return;
+			}
+
+		} else {
+			std::cerr << "Failed to map DMA buffer." << std::endl;
+			return;
+		}
+
+		// Deallocate the DMA contiguous buffer
+		std::cout << "Deallocating DMA contiguous buffer..." << std::endl;
+		if (d.deallocDmaContig(dmaBuffer.pa)) {
+			std::cout << "DMA contiguous buffer deallocated successfully." << std::endl;
+		} else {
+			std::cerr << "Failed to deallocate DMA contiguous buffer." << std::endl;
+			return;
+		}
+		
+	} else {
+		std::cerr << "Failed to allocate DMA contiguous buffer." << std::endl;
 	}
 }
 
