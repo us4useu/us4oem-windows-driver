@@ -43,6 +43,7 @@
     <ClInclude Include="devicelocation.hpp" />
     <ClInclude Include="driver.hpp" />
     <ClInclude Include="sdk.hpp" />
+    <ClInclude Include="stats.hpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{F38080CA-B82F-8B77-33F1-E94676C02B8A}</ProjectGuid>
