@@ -55,6 +55,16 @@ VOID us4oemIoctlMmap(
         // For DMA areas, we assume the user has provided a valid virtual address
         address = arg.va;
         length = arg.length_limit; // Use the length limit provided by the user
+
+		// Check if the length is valid
+        if (length == 0) {
+            TraceEvents(TRACE_LEVEL_ERROR,
+                TRACE_IOCTL,
+                "Length for DMA area cannot be zero");
+            WdfRequestComplete(Request, STATUS_INVALID_PARAMETER);
+            return;
+		}
+
         break;
     }
 
