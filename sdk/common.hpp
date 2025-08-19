@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <format>
+#include <concepts>
 
 // Windows headers
 #include <windows.h>

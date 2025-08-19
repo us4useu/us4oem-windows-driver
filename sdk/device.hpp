@@ -3,6 +3,13 @@
 #include "devicelocation.hpp"
 #include "common.hpp"
 
+#include <iostream>
+
+// This is ~awful and unsafe~, but in the specific use below it's basically the only way to
+// have a function template that can take nullptr or a pointer type.
+template<class T>
+concept NullablePtr = std::is_pointer_v<T> || std::is_null_pointer_v<T>;
+
 class Us4OemDeviceStats {
 public:
 	Us4OemDeviceStats(us4oem_stats raw) :
@@ -97,18 +104,18 @@ public:
 
 	// Retrieves the driver version.
 	unsigned long getDriverVersion() {
-		us4oem_driver_info driverInfo;
+		us4oem_driver_info driverInfo = {};
 
-		ioctl(US4OEM_WIN32_IOCTL_GET_DRIVER_INFO, NULL, 0, &driverInfo, sizeof(driverInfo));
+		ioctl(US4OEM_WIN32_IOCTL_GET_DRIVER_INFO, nullptr, &driverInfo);
 
 		return driverInfo.version;
 	}
 
 	// Retrieves the driver version as a string.
 	std::string getDriverVersionString() {
-		us4oem_driver_info driverInfo;
+		us4oem_driver_info driverInfo = {};
 
-		ioctl(US4OEM_WIN32_IOCTL_GET_DRIVER_INFO, NULL, 0, &driverInfo, sizeof(driverInfo));
+		ioctl(US4OEM_WIN32_IOCTL_GET_DRIVER_INFO, nullptr, &driverInfo);
 
 		return std::format("{} {}.{}.{}",
 			std::string(driverInfo.name),
@@ -123,13 +130,13 @@ public:
 			throw std::range_error("Only BAR 0 and 4 are supported!");
 		}
 
-		us4oem_mmap_argument arg;
+		us4oem_mmap_argument arg = {};
 		arg.area = (bar == 0) ? MMAP_AREA_BAR_0 : MMAP_AREA_BAR_4;
 		arg.length_limit = 0; // Map the whole area
 		// arg.va is ignored for BARs
 
-		us4oem_mmap_response response;
-		ioctl(US4OEM_WIN32_IOCTL_MMAP, &arg, sizeof(arg), &response, sizeof(response));
+		us4oem_mmap_response response = {};
+		ioctl(US4OEM_WIN32_IOCTL_MMAP, &arg, &response);
 
 		if (response.address == NULL) {
 			throw std::runtime_error("Failed to map BAR " + std::to_string(bar));
@@ -140,22 +147,22 @@ public:
 
 	// Read stats
 	Us4OemDeviceStats readStats() {
-		us4oem_stats stats;
+		us4oem_stats stats = {};
 
-		ioctl(US4OEM_WIN32_IOCTL_READ_STATS, NULL, 0, &stats, sizeof(stats));
+		ioctl(US4OEM_WIN32_IOCTL_READ_STATS, nullptr, &stats);
 
 		return Us4OemDeviceStats(stats);
 	}
 
 	// Polls the device for pending IRQs. Note: BLOCKS THREAD UNTIL AN IRQ IS RECEIVED, IF NONE ARE PENDING.
 	bool poll() {
-		return ioctl(US4OEM_WIN32_IOCTL_POLL, NULL, 0, NULL, 0);
+		return ioctl(US4OEM_WIN32_IOCTL_POLL, nullptr, nullptr);
 	}
 
 	// Non-blocking poll for pending IRQs. Returns true if an IRQ is pending, false otherwise.
 	bool pollNonBlocking() {
 		try {
-			ioctl(US4OEM_WIN32_IOCTL_POLL_NONBLOCKING, NULL, 0, NULL, 0);
+			ioctl(US4OEM_WIN32_IOCTL_POLL_NONBLOCKING, nullptr, nullptr);
 			return true; // IRQ is pending
 		}
 		catch (const std::runtime_error&) {
@@ -166,12 +173,28 @@ public:
 
 	// Clears all pending IRQs. Note: this does not complete any poll requests.
 	bool pollClearPending() {
-		return ioctl(US4OEM_WIN32_IOCTL_CLEAR_PENDING, NULL, 0, NULL, 0);
+		return ioctl<nullptr_t,nullptr_t>(US4OEM_WIN32_IOCTL_CLEAR_PENDING, nullptr, nullptr);
 	}
 
 private:
-	// Wrapper for DeviceIoControl to reduce boilerplate.
-	bool ioctl(unsigned long ioctlCode, void* inputBuffer, unsigned long inputSize, void* outputBuffer, unsigned long outputSize) {
+	// A wrapper^2 of the ioctl function
+	// This function allows us to omit the input/output buffer sizes, as it's: a) inconvenient, and 
+	// b) easy to mess up. 
+	template<typename A = nullptr_t, typename B = nullptr_t> requires (NullablePtr<A> && NullablePtr<B>)
+	bool ioctl(unsigned long ioctlCode, 
+		A inputBuffer,
+		B outputBuffer) {
+
+		return ioctlRaw(ioctlCode,
+			inputBuffer,
+			std::is_null_pointer_v<A> ? 0 : sizeof(std::remove_pointer_t<A>),
+			outputBuffer,
+			std::is_null_pointer_v<B> ? 0 : sizeof(std::remove_pointer_t<B>)
+		);
+	}
+
+	// A "raw" C-like wrapper for DeviceIoControl to reduce boilerplate.
+	bool ioctlRaw(unsigned long ioctlCode, void* inputBuffer, unsigned long inputSize, void* outputBuffer, unsigned long outputSize) {
 		if (!isHandleOpen) {
 			throw std::runtime_error("Device handle is not open");
 		}
