@@ -57,6 +57,12 @@ public:
 		deviceHandle(INVALID_HANDLE_VALUE), 
 		isHandleOpen(false) {}
 
+	~Us4OemDevice() {
+		if (isHandleOpen) {
+			close(); // Ensure the handle is closed on destruction
+		}
+	}
+
 	// Opens the device
 	bool open() {
 		if (isHandleOpen) {
