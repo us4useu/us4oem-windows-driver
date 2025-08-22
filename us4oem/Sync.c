@@ -19,10 +19,6 @@ VOID us4oemIoctlPoll(
 
     // If there are IRQs left to be processed, we can complete the request immediately
     if (deviceContext->Stats.irq_pending_count > 0) {
-        TraceEvents(TRACE_LEVEL_INFORMATION,
-            TRACE_IOCTL,
-            "IRQ pending count is %d, completing request immediately",
-            deviceContext->Stats.irq_pending_count);
         WdfRequestComplete(Request, STATUS_SUCCESS);
         deviceContext->Stats.irq_pending_count--;
         return;
@@ -30,9 +26,6 @@ VOID us4oemIoctlPoll(
 
     // Wait for the interrupt to be signaled
     if (deviceContext->PendingRequest) {
-        TraceEvents(TRACE_LEVEL_WARNING,
-            TRACE_IOCTL,
-            "A request is already pending, completing with STATUS_DEVICE_BUSY");
         WdfRequestComplete(Request, STATUS_DEVICE_BUSY);
         return;
     }
@@ -51,10 +44,6 @@ VOID us4oemIoctlPollNonBlocking(
 
     // If there are IRQs left to be processed, we can complete the request immediately
     if (deviceContext->Stats.irq_pending_count > 0) {
-        TraceEvents(TRACE_LEVEL_INFORMATION,
-            TRACE_IOCTL,
-            "IRQ pending count is %d, completing request immediately",
-            deviceContext->Stats.irq_pending_count);
         WdfRequestComplete(Request, STATUS_SUCCESS);
         deviceContext->Stats.irq_pending_count--;
         return;

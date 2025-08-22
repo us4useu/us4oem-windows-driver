@@ -76,9 +76,10 @@ us4oemCreateDevice(
                 WDF_DMA_ENABLER_CONFIG dmaConfig;
                 WDF_DMA_ENABLER_CONFIG_INIT(
                     &dmaConfig,
-                    WdfDmaProfilePacket64,
-                    1 // We don't really care about this anyway, but it must be set
+                    WdfDmaProfileScatterGather64,
+                    0xFFFFFFFFFFFFFFFF // We don't really care about this anyway, but it must be set
                 );
+				dmaConfig.WdmDmaVersionOverride = 3; // We need more than 2 GiB for DMA transfers
 
                 if (!&dmaConfig) {
                     TraceEvents(TRACE_LEVEL_ERROR, TRACE_DRIVER, "WDF_DMA_ENABLER_CONFIG_INIT failed");

@@ -23,7 +23,15 @@ typedef struct _BAR_INFO
 	PVOID MappedAddress; // This is the virtual address after mapping the BAR
 } BAR_INFO, *PBAR_INFO;
 
+// Stores information 
+typedef struct _MEMORY_ALLOCATION 
+{
+	WDFMEMORY memory;
+	PMDL mdl;
+} MEMORY_ALLOCATION, *PMEMORY_ALLOCATION;
+
 USE_IN_LINKED_LISTS(WDFCOMMONBUFFER);
+USE_IN_LINKED_LISTS(MEMORY_ALLOCATION);
 
 typedef struct _US4OEM_CONTEXT
 {
@@ -42,7 +50,7 @@ typedef struct _US4OEM_CONTEXT
 
 	LINKED_LIST_POINTERS(WDFCOMMONBUFFER, DmaContiguousBuffers) // Linked list of contiguous DMA buffers
 
-	LINKED_LIST_POINTERS(WDFCOMMONBUFFER, DmaScatterGatherBuffers) // Linked list of scatter-gather DMA buffers
+	LINKED_LIST_POINTERS(MEMORY_ALLOCATION, DmaScatterGatherMemory) // Linked list of scatter-gather DMA buffers
 
 } US4OEM_CONTEXT, *PUS4OEM_CONTEXT;
 

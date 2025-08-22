@@ -23,7 +23,7 @@ typedef unsigned long us4oem_driver_version_t;
 
 // Can be used to check if the driver version is compatible with the application.
 // Also used in the IOCTL handler itself.
-#define US4OEM_DRIVER_VERSION ASSEMBLE_US4OEM_DRIVER_VERSION(0, 5, 0)
+#define US4OEM_DRIVER_VERSION ASSEMBLE_US4OEM_DRIVER_VERSION(0, 6, 0)
 
 // Define an Interface Guid so that apps can find the device and talk to it.
 DEFINE_GUID (GUID_DEVINTERFACE_us4oem,
@@ -66,6 +66,7 @@ DEFINE_GUID (GUID_DEVINTERFACE_us4oem,
 
 // Allocate a scatter-gather DMA buffer. Call with us4oem_dma_allocation_argument in the input buffer.
 // Returns us4oem_dma_scatter_gather_buffer_response in the output buffer.
+// Note: length MUST be <= US4OEM_DMA_SG_MAX_SIZE
 #define US4OEM_WIN32_IOCTL_ALLOCATE_DMA_SG_BUFFER \
     CTL_CODE(FILE_DEVICE_UNKNOWN, US4OEM_WIN32_IOCTL_BASE + 7, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
@@ -117,24 +118,26 @@ typedef struct _us4oem_mmap_response {
 
 typedef struct _us4oem_stats
 {
-    unsigned long irq_count; // Total number of IRQs received
-	unsigned long irq_pending_count; // Number of IRQs pending to be handled
+    size_t irq_count; // Total number of IRQs received
+    size_t irq_pending_count; // Number of IRQs pending to be handled
 
-	unsigned long dma_contig_alloc_count; // Number of contiguous DMA buffers currently allocated
-	unsigned long dma_contig_free_count; // Number of DMA buffers freed total
+    size_t dma_contig_alloc_count; // Number of contiguous DMA buffers currently allocated
+    size_t dma_contig_free_count; // Number of DMA buffers freed total
 
-	unsigned long dma_sg_alloc_count; // Number of scatter-gather DMA buffers currently allocated
-	unsigned long dma_sg_free_count; // Number of scatter-gather DMA buffers freed total
+    size_t dma_sg_alloc_count; // Number of scatter-gather DMA buffers currently allocated
+	size_t dma_sg_free_count; // Number of scatter-gather DMA buffers freed total
 
-	unsigned long file_open_count; // Number of times the device char device has been opened to be used by a client
+    size_t file_open_count; // Number of times the device char device has been opened to be used by a client
 
 } us4oem_stats;
 
 // ====== DMA Allocation Structure ======
 
+#define US4OEM_DMA_SG_MAX_SIZE ((unsigned long)0x80000000) // 2 GiB, Windows limitation
+
 typedef struct _us4oem_dma_allocation_argument {
     unsigned long length; // Length of the DMA buffer to allocate
-	unsigned long chunk_size; // Chunk size for scatter-gather allocations (ignored in contiguous allocations)
+    size_t max_chunks;
 } us4oem_dma_allocation_argument;
 
 typedef struct _us4oem_dma_contiguous_buffer_response {
@@ -143,14 +146,14 @@ typedef struct _us4oem_dma_contiguous_buffer_response {
 } us4oem_dma_contiguous_buffer_response;
 
 typedef struct _us4oem_dma_scatter_gather_buffer_chunk {
-    void* va; // Virtual address of the allocated buffer - note: this is NOT mapped to user-mode memory
     unsigned long long pa; // Physical address of the allocated buffer
 
-    unsigned long length; // Length of this chunk
+    size_t length; // Length of this chunk
 } us4oem_dma_scatter_gather_buffer_chunk;
 
 typedef struct _us4oem_dma_scatter_gather_buffer_response {
-    unsigned long chunk_count; // Number of chunks in the scatter-gather buffer
+	void* va; // Virtual address of the allocated buffer - note: this is NOT mapped to user-mode memory
+    size_t chunk_count; // Number of chunks in the scatter-gather buffer
 	size_t length_used; // Total size of this structure - see US4OEM_DMA_SG_RESPONSE_NEEDED_SIZE(chunk_count)
     
     //us4oem_dma_scatter_gather_buffer_chunk chunks[<DYNAMIC>]; // Array of chunks, size is variable based on chunk_count
@@ -160,8 +163,3 @@ typedef struct _us4oem_dma_scatter_gather_buffer_response {
 
 #define US4OEM_DMA_SG_RESPONSE_NEEDED_SIZE(chunk_count) \
     (sizeof(us4oem_dma_scatter_gather_buffer_response) + (chunk_count - 1) * sizeof(us4oem_dma_scatter_gather_buffer_chunk))
-
-#define US4OEM_DMA_SG_CHUNK_COUNT(length, chunk_size) \
-    (length % chunk_size == 0 ? \
-    (length / chunk_size) : \
-    (length / chunk_size + 1))

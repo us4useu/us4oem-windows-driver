@@ -9,6 +9,11 @@
 template<class T>
 concept NullablePtr = (std::is_pointer_v<T> || std::is_null_pointer_v<T>) && !std::is_const_v<T>;
 
+// Used for allocation of scatter-gather info buffers that are passed to the driver
+// This value was determined experimentally, 2 GiB allocations (which is the max allowed),
+// only seem to use about ~4000 in worst case scenario so this gives us a good margin.
+const size_t US4OEM_SG_ALLOC_MAX_CHUNKS = 8192;
+
 class Us4OemDevice {
 public:
 	Us4OemDevice(const Us4OemDeviceLocation& loc) :
@@ -191,57 +196,82 @@ public:
 	}
 
 	// Allocates a scatter-gather DMA buffer.
+	// If the length requested is larger than US4OEM_DMA_SG_MAX_SIZE, we will split it into multiple requests
 	// Note: due to how the driver works, we have to use ugly malloc to allocate the response buffer.
-	bool allocDmaScatterGather(unsigned long length, unsigned long chunkSize, std::vector<Us4OemDmaSgChunk>& addresses) {
+	void allocDmaScatterGather(size_t length,
+		std::vector<Us4OemDmaSgDescription>& description) {
 
-		unsigned long needed_size = US4OEM_DMA_SG_RESPONSE_NEEDED_SIZE(US4OEM_DMA_SG_CHUNK_COUNT(length, chunkSize));
+		size_t requests_needed = (size_t)std::ceil((double)length / (double)US4OEM_DMA_SG_MAX_SIZE);
+
+		description.reserve(requests_needed);
+
+		unsigned long needed_size = US4OEM_DMA_SG_RESPONSE_NEEDED_SIZE(US4OEM_SG_ALLOC_MAX_CHUNKS);
 
 		auto response = (us4oem_dma_scatter_gather_buffer_response*)malloc(needed_size);
 
-		us4oem_dma_allocation_argument arg = {};
-		arg.length = length;
-		arg.chunk_size = chunkSize;
+		for (size_t i = 0; i < requests_needed; i++) {
+			unsigned long chunk_length = i == requests_needed - 1 ?
+				(unsigned long)(length - (i * US4OEM_DMA_SG_MAX_SIZE)) : US4OEM_DMA_SG_MAX_SIZE;
+			us4oem_dma_allocation_argument arg = {};
+			arg.length = chunk_length;
+			arg.max_chunks = US4OEM_SG_ALLOC_MAX_CHUNKS;
 
-		// Use raw ioctl as the template can only deduce the size of const types.
-		ioctlRaw(US4OEM_WIN32_IOCTL_ALLOCATE_DMA_SG_BUFFER, 
-			&arg, 
-			sizeof(us4oem_dma_allocation_argument), 
-			response, 
-			needed_size);
+			// Use raw ioctl as the template can only deduce the size of const types.
+			try {
+				ioctlRaw(US4OEM_WIN32_IOCTL_ALLOCATE_DMA_SG_BUFFER,
+					&arg,
+					sizeof(us4oem_dma_allocation_argument),
+					response,
+					needed_size);
+			}
 
-		if (response->chunk_count == 0) {
-			free(response);
-			return false;
+			catch (const std::runtime_error& e) {
+				free(response); // Free the response buffer on error
+				throw e; // Re-throw the exception
+			}
+
+			if (response->chunk_count == 0) {
+				free(response);
+				return;
+			}
+
+			description.push_back(Us4OemDmaSgDescription());
+			auto& desc = description.back();
+			desc.va = response->va;
+
+			desc.chunks.reserve(response->chunk_count);
+
+			for (unsigned int j = 0; j < response->chunk_count; j++) {
+				desc.length += response->chunks[j].length;
+				desc.chunks.push_back({
+					desc.length, // VA offset from the top
+					response->chunks[j].pa,  // Physical address of the chunk
+					response->chunks[j].length // Length of the chunk
+					});
+			}
 		}
 
-		addresses.reserve(response->chunk_count);
-
-		for (unsigned int i = 0; i < response->chunk_count; i++) {
-			addresses.push_back({
-				response->chunks[i].va, // Virtual address of the chunk
-				response->chunks[i].pa,  // Physical address of the chunk
-				response->chunks[i].length // Length of the chunk
-			});
-		}
-
-		free(response); 
-
-		return true;
+		return;
 	}
 
-	bool deallocDmaScatterGather(std::vector<Us4OemDmaSgChunk>& chunks) {
-		if (chunks.empty()) {
-			return true; // Nothing to deallocate
+	bool deallocDmaScatterGather(std::vector<Us4OemDmaSgDescription>& description) {
+		if (description.size() == 0) {
+			return true; // Nothing to do
 		}
 
-		for (const auto& chunk : chunks) {
-			void* va = chunk.va; // Get rid of constness
-			ioctl(US4OEM_WIN32_IOCTL_DEALLOCATE_DMA_SG_BUFFER, 
-				&va,
-				nullptr);
+		// Deallocate all the scatter-gather buffers
+		for (auto& desc : description) {
+			try {
+				ioctl(US4OEM_WIN32_IOCTL_DEALLOCATE_DMA_SG_BUFFER,
+					&desc.va,
+					nullptr);
+			}
+			catch (const std::runtime_error&) {
+				return false;
+			}
 		}
 
-		chunks.clear(); // Clear the vector after deallocation
+		description.clear();
 
 		return true;
 	}

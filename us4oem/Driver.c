@@ -198,9 +198,11 @@ us4oemEvtDeviceReleaseHardware(
             deviceContext->Stats.dma_contig_free_count++;
         }
     }
-    LINKED_LIST_FOR_EACH(WDFCOMMONBUFFER, deviceContext->DmaScatterGatherBuffers, commonBuffer) {
+    LINKED_LIST_FOR_EACH(MEMORY_ALLOCATION, deviceContext->DmaScatterGatherMemory, commonBuffer) {
         if (commonBuffer->Item != NULL) {
-            WdfObjectDelete(*commonBuffer->Item);
+            MmUnlockPages(commonBuffer->Item->mdl);
+            WdfObjectDelete(commonBuffer->Item->memory);
+            IoFreeMdl(commonBuffer->Item->mdl);
             deviceContext->Stats.dma_sg_free_count++;
         }
 	}
@@ -209,7 +211,7 @@ us4oemEvtDeviceReleaseHardware(
     deviceContext->Stats.dma_contig_alloc_count = 0;
 
     LINKED_LIST_CLEAR(WDFCOMMONBUFFER, deviceContext->DmaContiguousBuffers);
-	LINKED_LIST_CLEAR(WDFCOMMONBUFFER, deviceContext->DmaScatterGatherBuffers);
+	LINKED_LIST_CLEAR(MEMORY_ALLOCATION, deviceContext->DmaScatterGatherMemory);
 
     // Clear the pending request
     if (deviceContext->PendingRequest) {

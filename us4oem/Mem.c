@@ -69,13 +69,14 @@ VOID us4oemIoctlMmap(
                 break;
             }
 		}
-        LINKED_LIST_FOR_EACH(WDFCOMMONBUFFER, deviceContext->DmaScatterGatherBuffers, commonBuffer) {
+        LINKED_LIST_FOR_EACH(MEMORY_ALLOCATION, deviceContext->DmaScatterGatherMemory, commonBuffer) {
             if (found) {
                 break; // No need to continue if we already found it
 			}
+            size_t size;
             if (commonBuffer->Item != NULL &&
-                WdfCommonBufferGetAlignedVirtualAddress(*commonBuffer->Item) == address) {
-                length = (ULONG)WdfCommonBufferGetLength(*commonBuffer->Item);
+                WdfMemoryGetBuffer(commonBuffer->Item->memory, &size) == address) {
+                length = (ULONG)size;
                 found = TRUE;
                 break;
             }

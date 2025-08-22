@@ -2,7 +2,7 @@
 
 #include <iostream>
 
-const bool QEMU_TEST = true;
+const bool QEMU_TEST = false;
 
 bool qemuTriggerIrq(void* bar4) {
 	if (!QEMU_TEST) {
@@ -17,6 +17,8 @@ bool qemuTriggerIrq(void* bar4) {
 }
 
 void test(const Us4OemDeviceLocation& location) {
+	std::cin.get();
+
 	std::cout << std::endl << "========== Testing on " << location.toString() << "==========" << std::endl;
 	std::cout << "System path: " << location.getSystemPath() << std::endl;
 
@@ -52,10 +54,12 @@ void test(const Us4OemDeviceLocation& location) {
 	auto bar4 = d.mapBar(4);
 	std::cout << "BAR 4 mapped at: 0x" << std::hex << bar4.address << " length: 0x" << bar4.lengthMapped << std::dec << std::endl;
 	std::cout << "  @ offset 0x0: 0x" << std::hex << *(unsigned int*)((char*)bar4.address + 0x0) << std::dec << std::endl;
-	// We are expecting 0x0 to be 0x0100_00ED
-	if (*(unsigned int*)((char*)bar4.address + 0x0) != 0x010000ED) {
-		std::cerr << "Unexpected value at BAR 4 offset 0x0: 0x" << std::hex << *(unsigned int*)((char*)bar4.address + 0x0) << std::dec << std::endl;
-		return;
+	if (QEMU_TEST) {
+		// We are expecting 0x0 to be 0x0100_00ED on QEMU
+		if (*(unsigned int*)((char*)bar4.address + 0x0) != 0x010000ED) {
+			std::cerr << "Unexpected value at BAR 4 offset 0x0: 0x" << std::hex << *(unsigned int*)((char*)bar4.address + 0x0) << std::dec << std::endl;
+			return;
+		}
 	}
 
 	// Read stats
@@ -167,33 +171,63 @@ void test(const Us4OemDeviceLocation& location) {
 	// Sanity check
 	d.deallocAll();
 
-	// Let's allocate a large scatter-gather buffer, 1600 MiB, 0.5 MiB chunks.
-	unsigned long sgAllocSize = 1600 * 1024 * 1024; // 1600 MiB
-	unsigned long sgChunkSize = 512 * 1024 - 4 * 1024; // 0.5 MiB
+	// Let's allocate a large scatter-gather buffer
+	size_t sgAllocSize = QEMU_TEST ? 
+		(GiB * 2) : // 2 GiB on QEMU
+		(GiB * (size_t)22); // 22 GiB on hardware (the test laptop has 32 GiB of RAM)
 
-	std::cout << "Allocating DMA scatter-gather buffer length=0x" << std::hex << sgAllocSize << std::dec 
-		<< " with chunk size=0x" << std::hex << sgChunkSize << std::dec << " for device..." << std::endl;
+	std::cout << "Allocating DMA scatter-gather buffer length=0x" << std::hex << sgAllocSize  
+		<< " for device..." << std::dec << std::endl;
 
-	std::vector<Us4OemDmaSgChunk> sgChunks = {};
+	std::vector<Us4OemDmaSgDescription> desc = {};
 
-	auto status = d.allocDmaScatterGather(sgAllocSize, sgChunkSize, sgChunks);
-	if (!status) {
-		std::cerr << "Failed to allocate DMA scatter-gather buffer." << std::endl;
+	try {
+		d.allocDmaScatterGather(sgAllocSize, desc);
+	} catch (const std::runtime_error& e) {
+		std::cerr << "Failed to allocate DMA scatter-gather buffer: " << e.what() << std::endl;
 		return;
 	}
 
-	std::cout << "Allocated " << sgChunks.size() << " chunks" << std::endl;
-	for (int i = 0; i < sgChunks.size(); ++i) {
-		if (i % 100 == 0) {
-			std::cout << "  Chunk " << i << ": VA: 0x" << std::hex << sgChunks[i].va
-				<< ", PA: 0x" << sgChunks[i].pa <<
-				", length: 0x" << sgChunks[i].length << std::dec << std::endl;
+	std::cout << "DMA scatter-gather buffer allocated successfully." << std::endl;
+
+	size_t actualAllocLength = 0;
+	size_t numChunks = 0;
+
+	for (const auto& dsc : desc) {
+		actualAllocLength += dsc.length;
+		numChunks += dsc.chunks.size();
+		std::cout << "  SG buffer at VA: 0x" << std::hex << dsc.va << std::dec 
+			<< " length: 0x" << std::hex << dsc.length << std::dec
+			<< " in " << dsc.chunks.size() << " chunks." << std::endl;
+	}
+	std::cout << "Total allocated length: 0x" << std::hex << actualAllocLength 
+		<< std::dec << " in " << numChunks << " chunks." << std::endl;
+
+	// Map the first chunk of the first descriptor to test
+	auto mappedBuffer = d.mapDmaBuf(desc.front().va);
+	if (mappedBuffer.address) {
+		std::cout << "Mapped first chunk of first SG DMA buffer at: 0x" << std::hex << mappedBuffer.address << std::dec << std::endl;
+		// Write anything to check if the mapping works
+		std::cout << "Writing to the mapped SG DMA buffer..." << std::endl;
+		static_cast<int*>(mappedBuffer.address)[0] = 0xBB; // Write a byte to the first byte of the buffer
+		// Read back to verify
+		std::cout << "Reading back from the mapped SG DMA buffer..." << std::endl;
+		if (static_cast<int*>(mappedBuffer.address)[0] == 0xBB) {
+			std::cout << "Mapped SG DMA buffer read back successfully." << std::endl;
 		}
+		else {
+			std::cerr << "Mapped SG DMA buffer read back failed." << std::endl;
+			return;
+		}
+	}
+	else {
+		std::cerr << "Failed to map SG DMA buffer." << std::endl;
+		return;
 	}
 
 	// Deallocate the DMA scatter-gather buffer
 	std::cout << "Deallocating DMA scatter-gather buffer..." << std::endl;
-	if (d.deallocDmaScatterGather(sgChunks)) {
+	if (d.deallocDmaScatterGather(desc)) {
 		std::cout << "DMA scatter-gather buffer deallocated successfully." << std::endl;
 	} else {
 		std::cerr << "Failed to deallocate DMA scatter-gather buffer." << std::endl;
@@ -204,17 +238,11 @@ void test(const Us4OemDeviceLocation& location) {
 	Us4OemDeviceStats stats = d.readStats();
 	std::cout << "Stats after deallocating: " << std::endl << stats.toString() << std::endl;
 
-	// Allocate 1 MiB in 16 KiB chunks to test DMA deallocate all
+	// Allocate 100 MiB and 10 MiB
 	std::cout << std::endl << "====== DMA Deallocate All Test ======" << std::endl;
 
-	sgAllocSize = 1024 * 1024; // 1 MiB
-	sgChunkSize = 16 * 1024; // 16 KiB
-	status = d.allocDmaScatterGather(sgAllocSize, sgChunkSize, sgChunks);
-
-	if (!status) {
-		std::cerr << "Failed to allocate DMA scatter-gather buffer for deallocate all test." << std::endl;
-		return;
-	}
+	d.allocDmaScatterGather(MiB * 100, desc);
+	d.allocDmaScatterGather(MiB * 10, desc);
 
 	stats = d.readStats();
 	std::cout << "Stats before deallocating: " << std::endl << stats.toString() << std::endl;
@@ -249,10 +277,12 @@ void test(const Us4OemDeviceLocation& location) {
 	// Check if there's still a buffer allocated
 	stats = d.readStats();
 	if (stats.dmaContigAllocCount > 0) {
-		std::cerr << "Sticky mode failed: DMA contiguous buffer is still allocated after reopening the device." << std::endl;
+		std::cerr << 
+			"Sticky mode failed: DMA contiguous buffer is still allocated after reopening the device." << std::endl;
 		return;
 	} else {
-		std::cerr << "Sticky mode works: no DMA contiguous buffer allocated after reopening the device." << std::endl;
+		std::cerr << 
+			"Sticky mode works: no DMA contiguous buffer allocated after reopening the device." << std::endl;
 	}
 }
 
@@ -261,6 +291,9 @@ int main() {
 
 	if (QEMU_TEST) {
 		std::cout << "Running in QEMU." << std::endl;
+	}
+	else {
+		std::cout << "Running on a real device." << std::endl;
 	}
 
 	size_t deviceCount = sdk.getDeviceCount();
