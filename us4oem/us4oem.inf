@@ -34,16 +34,19 @@ us4oem.sys  = 1,,
 CopyFiles = File_Copy
 
 [us4oem_Device.NT.hw]
-AddReg = Reg_Add
+AddReg = Device_Reg_Add
 
 [File_Copy]
 us4oem.sys
 
-[Reg_Add]
+[Device_Reg_Add]
 ; Exclusive access
 HKR,,Exclusive,0x10001,1
 ; Use MSI when supported
 HKR,Interrupt Management\MessageSignaledInterruptProperties,MSISupported,0x10001,1
+; Disable DMA remapping (per device, Windows 11 24H2+)
+HKR,"DMA Management","RemappingSupported",0x10001,0
+HKR,"DMA Management","RemappingFlags",0x10001,0
 
 ;-------------- Service installation
 [us4oem_Device.NT.Services]
@@ -56,9 +59,14 @@ ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
 StartType      = 3               ; SERVICE_DEMAND_START
 ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
 ServiceBinary  = %13%\us4oem.sys
+AddReg = Drivers_Reg_Add
 
 [us4oem_Device.NT.Wdf]
 KmdfService = us4oem, us4oem_wdfsect
+
+[Drivers_Reg_Add]
+; DMA remapping disable (per driver, versions up to 24H2)
+HKR,Parameters,DmaRemappingCompatible,0x10001,0
 
 [us4oem_wdfsect]
 KmdfLibraryVersion = $KMDFVERSION$
