@@ -1,6 +1,7 @@
 #include "sdk.hpp"
 
 #include <iostream>
+#include <thread>
 
 const bool QEMU_TEST = false;
 
@@ -14,6 +15,71 @@ bool qemuTriggerIrq(void* bar4) {
 	((int*)bar4)[0x64 / sizeof(int)] = 0x01;
 	Sleep(100); // Wait a bit for QEMU to trigger the IRQ, Windows to handle it, DPC to fire etc.
 	return true;
+}
+
+void torture(const Us4OemDeviceLocation& location) {
+	std::cout << "=====> Torture round starting on " << location.toString() << std::endl;
+
+	unsigned long contigSize = 5 * 1024 * 1024; // 5 MiB
+	size_t sgAllocSize1 = GiB * size_t(10); // 10 GiB
+	size_t sgAllocSize2 = MiB * 64; // 64 MiB
+
+	std::vector<Us4OemDmaSgDescription> desc1 = {};
+	std::vector<Us4OemDmaSgDescription> desc2 = {};
+
+	Us4OemDevice d(location);
+
+	if (!d.open()) {
+		std::cerr << "Failed to open device for contiguous allocation." << std::endl;
+		return;
+	}
+
+	d.setStickyMode(false);
+
+	auto desc = d.allocDmaContig(contigSize);
+	
+	d.allocDmaScatterGather(sgAllocSize1, desc1);
+	d.allocDmaScatterGather(sgAllocSize2, desc2);
+
+	if (desc1.size() == 0 || desc2.size() == 0) {
+		std::cerr << "Failed to allocate scatter-gather DMA buffer." << std::endl;
+		throw std::runtime_error("Failed to allocate scatter-gather DMA buffer.");
+	}
+
+	if (!d.deallocDmaContig(desc.pa)) {
+		std::cerr << "Failed to deallocate contiguous DMA buffer." << std::endl;
+		throw std::runtime_error("Failed to deallocate contiguous DMA buffer.");
+	}
+
+	if (!d.deallocDmaScatterGather(desc1)) {
+		std::cerr << "Failed to deallocate scatter-gather DMA buffer." << std::endl;
+		throw std::runtime_error("Failed to deallocate scatter-gather DMA buffer.");
+	}
+
+	// Map the small SG allocation
+	d.mapDmaBuf(desc2[0].va, 0);
+
+	/*if (!d.deallocDmaScatterGather(desc2)) {
+		std::cerr << "Failed to deallocate scatter-gather DMA buffer." << std::endl;
+		throw std::runtime_error("Failed to deallocate scatter-gather DMA buffer.");
+	}*/
+
+	if (!d.deallocAll()) {
+		std::cerr << "Failed to deallocate all DMA buffers." << std::endl;
+		throw std::runtime_error("Failed to deallocate all DMA buffers.");
+	}
+
+	// Check stats for allocation counts
+	Us4OemDeviceStats stats = d.readStats();
+	if (stats.dmaContigAllocCount != 0 || stats.dmaSgAllocCount != 0) {
+		std::cerr << "DMA allocation counts are not zero after deallocation!" << std::endl;
+		std::cerr << "Stats: " << std::endl << stats.toString() << std::endl;
+		throw std::runtime_error("DMA allocation counts are not zero after deallocation!");
+	}
+
+	std::cout << "<===== Round OK on " << location.toString() << std::endl;
+
+	// Close is handled by destructor
 }
 
 void test(const Us4OemDeviceLocation& location) {
@@ -225,6 +291,8 @@ void test(const Us4OemDeviceLocation& location) {
 		return;
 	}
 
+	std::cin.get();
+
 	// Deallocate the DMA scatter-gather buffer
 	std::cout << "Deallocating DMA scatter-gather buffer..." << std::endl;
 	if (d.deallocDmaScatterGather(desc)) {
@@ -286,7 +354,7 @@ void test(const Us4OemDeviceLocation& location) {
 	}
 }
 
-int main() {
+int main(int argc, char* argv[]) {
 	Us4OemDriverSdk sdk = Us4OemDriverSdk();
 
 	if (QEMU_TEST) {
@@ -298,10 +366,71 @@ int main() {
 
 	size_t deviceCount = sdk.getDeviceCount();
 	std::cout << "Found " << deviceCount << " us4oem devices." << std::endl;
-	for (int i = 0; i < deviceCount; ++i) {
-		const Us4OemDeviceLocation loc = sdk.getDeviceLocation(i);
-			
-		test(loc);
+
+	if (argc == 1) {
+		// Help
+		std::cout << "Usage: " << std::endl;
+		std::cout << "  " << argv[0] << " list" << std::endl << "    List all devices and exit" << std::endl;
+		std::cout << "  " << argv[0] << " test" << std::endl << "    Basic test of all the functions" << std::endl;
+		std::cout << "  " << argv[0] << " torture" << std::endl << "    Torture test for bugcheck hunting and looking for memory leaks (press enter to stop)" << std::endl;
+
+		return 0;
+	}
+
+	std::string command = argv[1];
+
+	if (command == "list") {
+		for (int i = 0; i < deviceCount; ++i) {
+			const Us4OemDeviceLocation loc = sdk.getDeviceLocation(i);
+			std::cout << "Device " << i << ": " << loc.toString() << std::endl;
+			std::cout << "  System path: " << loc.getSystemPath() << std::endl;
+		}
+		return 0;
+	} else if (command == "torture") {
+
+		if (deviceCount == 0) {
+			std::cerr << "No devices found; cannot torture test." << std::endl;
+			return 1;
+		}
+
+		std::cout << "Torture test running. Press Enter to stop." << std::endl;
+		
+		// Start threads for each device
+		std::vector<std::jthread> threads;
+		std::stop_source stop_source;
+
+		// Execute until ctrl-c
+		for (int i = 0; i < deviceCount; ++i) {
+			const Us4OemDeviceLocation loc = sdk.getDeviceLocation(i);
+			threads.emplace_back([loc, &stop_source]() {
+				while (!stop_source.get_token().stop_requested()) {
+					try {
+						torture(loc);
+					} catch (const std::exception& e) {
+						std::cerr << "Exception in torture test thread: " << e.what() << std::endl;
+						while (true);
+					}
+				}
+				});
+		}
+
+		std::cin.get();
+		stop_source.request_stop();
+
+		return 0;
+
+	} else if (command == "test") {
+
+		for (int i = 0; i < deviceCount; ++i) {
+			const Us4OemDeviceLocation loc = sdk.getDeviceLocation(i);
+
+			test(loc);
+		}
+	}
+	else {
+		// Unknown command
+		std::cerr << "Unknown command: " << command << std::endl;
+		return 1;
 	}
 
 	return 0;
