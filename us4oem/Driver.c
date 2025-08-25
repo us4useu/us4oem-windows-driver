@@ -200,6 +200,7 @@ us4oemEvtDeviceReleaseHardware(
     }
     LINKED_LIST_FOR_EACH(MEMORY_ALLOCATION, deviceContext->DmaScatterGatherMemory, commonBuffer) {
         if (commonBuffer->Item != NULL) {
+            WdfObjectDelete(commonBuffer->Item->transaction);
             MmUnlockPages(commonBuffer->Item->mdl);
             WdfObjectDelete(commonBuffer->Item->memory);
             IoFreeMdl(commonBuffer->Item->mdl);

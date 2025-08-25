@@ -30,6 +30,7 @@ VOID us4oemIoctlDeallocateAllDmaBuffers(
 	// Iterate over the linked list of scatter-gather buffers and delete each one
     LINKED_LIST_FOR_EACH(MEMORY_ALLOCATION, deviceContext->DmaScatterGatherMemory, commonBuffer) {
         if (commonBuffer->Item != NULL) {
+            WdfObjectDelete(commonBuffer->Item->transaction);
             MmUnlockPages(commonBuffer->Item->mdl);
             WdfObjectDelete(commonBuffer->Item->memory);
             IoFreeMdl(commonBuffer->Item->mdl);
@@ -67,6 +68,7 @@ VOID us4oemIoctlDeallocateScatterGatherDmaBuffer(
             WdfMemoryGetBuffer(commonBuffer->Item->memory, NULL) == va) {
 
             // Found the buffer, delete it
+            WdfObjectDelete(commonBuffer->Item->transaction);
             MmUnlockPages(commonBuffer->Item->mdl);
             WdfObjectDelete(commonBuffer->Item->memory);
             IoFreeMdl(commonBuffer->Item->mdl);
@@ -246,9 +248,7 @@ VOID us4oemIoctlAllocateDmaScatterGatherBuffer(
     }
     
 	// Create a DMA transaction
-	WDFDMATRANSACTION transaction;
-
-    status = WdfDmaTransactionCreate(deviceContext->DmaEnabler, WDF_NO_OBJECT_ATTRIBUTES, &transaction);
+    status = WdfDmaTransactionCreate(deviceContext->DmaEnabler, WDF_NO_OBJECT_ATTRIBUTES, &allocation->transaction);
 
     if (!NT_SUCCESS(status)) {
         TraceEvents(TRACE_LEVEL_ERROR,
@@ -268,7 +268,7 @@ VOID us4oemIoctlAllocateDmaScatterGatherBuffer(
 	context->VA = WdfMemoryGetBuffer(allocation->memory, NULL);
 
     status = WdfDmaTransactionInitialize(
-        transaction,
+        allocation->transaction,
         &us4oemProgramDma,
         WdfDmaDirectionReadFromDevice,
         allocation->mdl,
@@ -280,7 +280,7 @@ VOID us4oemIoctlAllocateDmaScatterGatherBuffer(
         TraceEvents(TRACE_LEVEL_ERROR,
             TRACE_IOCTL,
             "WdfDmaTransactionInitialize failed");
-        WdfObjectDelete(transaction);
+        WdfObjectDelete(allocation->transaction);
         MmUnlockPages(allocation->mdl);
         IoFreeMdl(allocation->mdl);
         WdfObjectDelete(allocation->memory);
@@ -289,15 +289,15 @@ VOID us4oemIoctlAllocateDmaScatterGatherBuffer(
         return;
     }
 
-    WdfDmaTransactionSetImmediateExecution(transaction, TRUE);
+    WdfDmaTransactionSetImmediateExecution(allocation->transaction, TRUE);
 
-    status = WdfDmaTransactionExecute(transaction, context);
+    status = WdfDmaTransactionExecute(allocation->transaction, context);
 
     if (!NT_SUCCESS(status)) {
         TraceEvents(TRACE_LEVEL_ERROR,
             TRACE_IOCTL,
             "WdfDmaTransactionExecute failed");
-        WdfObjectDelete(transaction);
+        WdfObjectDelete(allocation->transaction);
         MmUnlockPages(allocation->mdl);
         IoFreeMdl(allocation->mdl);
         WdfObjectDelete(allocation->memory);
