@@ -30,10 +30,22 @@ VOID us4oemIoctlDeallocateAllDmaBuffers(
 	// Iterate over the linked list of scatter-gather buffers and delete each one
     LINKED_LIST_FOR_EACH(MEMORY_ALLOCATION, deviceContext->DmaScatterGatherMemory, commonBuffer) {
         if (commonBuffer->Item != NULL) {
-            WdfObjectDelete(commonBuffer->Item->transaction);
-            MmUnlockPages(commonBuffer->Item->mdl);
-            WdfObjectDelete(commonBuffer->Item->memory);
-            IoFreeMdl(commonBuffer->Item->mdl);
+            if (commonBuffer->Item->transaction != NULL) {
+                WdfObjectDelete(commonBuffer->Item->transaction);
+                commonBuffer->Item->transaction = NULL;
+            }
+            if (commonBuffer->Item->memory_locked) {
+                commonBuffer->Item->memory_locked = FALSE;
+                MmUnlockPages(commonBuffer->Item->mdl);
+            }
+            if (commonBuffer->Item->memory != NULL) {
+                WdfObjectDelete(commonBuffer->Item->memory);
+                commonBuffer->Item->memory = NULL;
+            }
+            if (commonBuffer->Item->mdl != NULL) {
+                IoFreeMdl(commonBuffer->Item->mdl);
+                commonBuffer->Item->mdl = NULL;
+			}
             deviceContext->Stats.dma_sg_free_count++;
         }
 	}
@@ -68,10 +80,22 @@ VOID us4oemIoctlDeallocateScatterGatherDmaBuffer(
             WdfMemoryGetBuffer(commonBuffer->Item->memory, NULL) == va) {
 
             // Found the buffer, delete it
-            WdfObjectDelete(commonBuffer->Item->transaction);
-            MmUnlockPages(commonBuffer->Item->mdl);
-            WdfObjectDelete(commonBuffer->Item->memory);
-            IoFreeMdl(commonBuffer->Item->mdl);
+            if (commonBuffer->Item->transaction != NULL) {
+                WdfObjectDelete(commonBuffer->Item->transaction);
+                commonBuffer->Item->transaction = NULL;
+            }
+            if (commonBuffer->Item->memory_locked) {
+                commonBuffer->Item->memory_locked = FALSE;
+                MmUnlockPages(commonBuffer->Item->mdl);
+            }
+            if (commonBuffer->Item->memory != NULL) {
+                WdfObjectDelete(commonBuffer->Item->memory);
+                commonBuffer->Item->memory = NULL;
+            }
+            if (commonBuffer->Item->mdl != NULL) {
+                IoFreeMdl(commonBuffer->Item->mdl);
+                commonBuffer->Item->mdl = NULL;
+            }
             deviceContext->Stats.dma_sg_free_count++;
             deviceContext->Stats.dma_sg_alloc_count--;
             LINKED_LIST_REMOVE(MEMORY_ALLOCATION, deviceContext->DmaScatterGatherMemory, commonBuffer);
@@ -236,6 +260,7 @@ VOID us4oemIoctlAllocateDmaScatterGatherBuffer(
 
     __try {
         MmProbeAndLockPages(allocation->mdl, KernelMode, IoWriteAccess);
+		allocation->memory_locked = TRUE;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         TraceEvents(TRACE_LEVEL_ERROR,
             TRACE_IOCTL,

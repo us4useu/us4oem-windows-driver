@@ -200,10 +200,22 @@ us4oemEvtDeviceReleaseHardware(
     }
     LINKED_LIST_FOR_EACH(MEMORY_ALLOCATION, deviceContext->DmaScatterGatherMemory, commonBuffer) {
         if (commonBuffer->Item != NULL) {
-            WdfObjectDelete(commonBuffer->Item->transaction);
-            MmUnlockPages(commonBuffer->Item->mdl);
-            WdfObjectDelete(commonBuffer->Item->memory);
-            IoFreeMdl(commonBuffer->Item->mdl);
+            if (commonBuffer->Item->transaction != NULL) {
+                WdfObjectDelete(commonBuffer->Item->transaction);
+                commonBuffer->Item->transaction = NULL;
+            }
+            if (commonBuffer->Item->memory_locked) {
+                commonBuffer->Item->memory_locked = FALSE;
+                MmUnlockPages(commonBuffer->Item->mdl);
+            }
+            if (commonBuffer->Item->memory != NULL) {
+                WdfObjectDelete(commonBuffer->Item->memory);
+                commonBuffer->Item->memory = NULL;
+            }
+            if (commonBuffer->Item->mdl != NULL) {
+                IoFreeMdl(commonBuffer->Item->mdl);
+                commonBuffer->Item->mdl = NULL;
+            }
             deviceContext->Stats.dma_sg_free_count++;
         }
 	}
